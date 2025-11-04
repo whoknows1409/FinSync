@@ -1,0 +1,220 @@
+# ===========================
+# FINSYNC PROJECT GITIGNORE
+# ===========================
+
+# ============
+# Dependencies
+# ============
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+python-service/venv/
+python-service/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# ================
+# Environment Files
+# ================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+backend/.env
+frontend/.env
+python-service/.env
+*.env
+
+# ===================
+# Logs & Debug Files
+# ===================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+backend/logs/
+frontend/.next/
+
+# ====================
+# Build Output & Cache
+# ====================
+.next/
+out/
+build/
+dist/
+.cache/
+.parcel-cache/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# ==================
+# IDE & Editor Files
+# ==================
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+.history/
+
+# ==============
+# Testing & Coverage
+# ==============
+coverage/
+.nyc_output/
+*.cover
+*.py,cover
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+__pycache__/
+
+# ================
+# Database Files
+# ================
+*.sqlite
+*.sqlite3
+*.db
+
+# ===================
+# Upload & Temp Files
+# ===================
+backend/uploads/*
+!backend/uploads/.gitkeep
+frontend/uploads/*
+!frontend/uploads/.gitkeep
+tmp/
+temp/
+*.tmp
+
+# ===============
+# OS System Files
+# ===============
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ====================
+# Package Manager Files
+# ====================
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.pnpm-store/
+.yarn/
+.yarn-integrity
+
+# =================
+# Production Builds
+# =================
+*.tgz
+*.zip
+*.tar.gz
+
+# ====================
+# Sensitive Information
+# ====================
+*.pem
+*.key
+*.cert
+*.crt
+secrets/
+credentials/
+
+# ===============
+# Miscellaneous
+# ===============
+.eslintcache
+*.bak
+*.backup
+.vercel
+.netlify
+
+# =================
+# Test & Debug Files
+# =================
+# Test files
+test-*.js
+test_*.py
+*-test.js
+*_test.py
+*.test.js
+*.spec.js
+*.test.ts
+*.spec.ts
+test/
+tests/
+__tests__/
+# Exclude organized test directories if they exist
+!backend/tests/
+!frontend/tests/
+!backend/__tests__/
+!frontend/__tests__/
+
+# Debug & temporary files
+*-debug.js
+*-debug.py
+temp-*.js
+temp-*.py
+temporary-*.js
+temporary-*.py
+debug-*.js
+debug-*.py
+
+# Verification & fix files
+verify-*.js
+verify-*.py
+fix-*.js
+fix-*.py
+fixed-*.js
+fixed-*.py
+
+# Minimal test files
+minimal-*.js
+minimal-*.py
+simple-*.js
+simple-*.py
+
+# Integration test files
+integration-*.js
+integration-*.py
+full-integration-*.js
+final-integration-*.js
+
+# Utility scripts (commonly temporary)
+check-*.js
+check-*.py
+stop-*.js
+stop-*.py
+
+# Python-specific test files
+nse_*.py
+test_*.py
+
+# ======================
+# Virtual Environments
+# ======================
+.venv/
+.venv-*/
+venv/
+ENV/
+env/
+.virtualenv/

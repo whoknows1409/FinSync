@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+  },
+  "scripts": {
+    "upload-logo": "node scripts/upload-logo.js"
+  }
+}
