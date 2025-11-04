@@ -272,39 +272,53 @@ See `.env.example` files for complete configuration.
 
 ## 🚀 Deployment
 
-### Deploy to Render
+### Deploy to Render (Recommended)
 
-FinSync includes comprehensive deployment guides for Render:
+FinSync is optimized for deployment on Render with comprehensive guides:
 
-1. **Quick Start**: Read `YOUR_RENDER_CONFIG.md` for your personalized setup
-2. **Step-by-Step**: Follow `YOUR_DEPLOYMENT_CHECKLIST.md`
-3. **Detailed Guide**: See `RENDER_DEPLOYMENT_GUIDE.md`
-4. **Troubleshooting**: Reference `TROUBLESHOOTING.md`
+📚 **Deployment Documentation**:
+1. 🚀 **[DEPLOYMENT_QUICK_START.md](DEPLOYMENT_QUICK_START.md)** - 5-minute quick start guide
+2. 📖 **[RENDER_DEPLOYMENT_GUIDE.md](RENDER_DEPLOYMENT_GUIDE.md)** - Complete step-by-step guide
+3. ✅ **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** - Interactive checklist
+4. 🔧 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
 
-**Deployment Time**: ~20-30 minutes
+**Deployment Time**: ~10-15 minutes
 
 **Cost**:
-- Free tier: $0/month (with cold starts)
-- Paid tier: $14/month (always warm)
+- 🎉 Free tier: $0/month (with 15-min sleep after inactivity)
+- ⚡ Paid tier: $14/month ($7/service, always warm)
 
 ### Prerequisites
-- GitHub account with repo pushed
-- Render account (free)
-- MongoDB Atlas account (free)
-- Gemini API key
+- ✅ GitHub account with this repo pushed
+- ✅ [Render account](https://dashboard.render.com/) (free)
+- ✅ [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) (free M0 cluster)
+- ✅ Gemini API key (from Google AI Studio)
 
-### Quick Deploy
+### Quick Deploy Steps
 ```bash
-# 1. Push to GitHub
-git push origin main
+# 1. Ensure code is pushed to GitHub
+git add .
+git commit -m "Ready for deployment"
+git push origin master
 
-# 2. Deploy on Render
-# - Backend: New Web Service → Root: backend
-# - Frontend: New Web Service → Root: frontend
+# 2. Follow DEPLOYMENT_QUICK_START.md for:
+#    - MongoDB Atlas setup (2 minutes)
+#    - Backend deployment (3 minutes)
+#    - Frontend deployment (3 minutes)
+#    - Configuration (2 minutes)
 
-# 3. Add environment variables from YOUR_RENDER_CONFIG.md
+# 3. Your app will be live at:
+#    Frontend: https://your-app-name.onrender.com
+#    Backend:  https://your-app-name-api.onrender.com
+```
 
-# 4. Done! Your app is live!
+### Architecture
+```
+┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+│  Next.js        │─────▶│  Express API    │─────▶│  MongoDB Atlas  │
+│  Frontend       │      │  Backend        │      │  Database       │
+│  (Render)       │◀─────│  (Render)       │      │  (Cloud)        │
+└─────────────────┘      └─────────────────┘      └─────────────────┘
 ```
 
 ---
