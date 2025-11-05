@@ -117,9 +117,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true)
     setError(null)
     try {
-      console.log("🚀 Sending signup request to /api/auth/register")
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+      const signupUrl = `${apiUrl}/auth/register`
       
-      const response = await fetch('/api/auth/register', {
+      console.log("🚀 Attempting signup with:", { name, email, passwordLength: password.length, passwordStrength: password.length >= 8 ? 4 : 2 })
+      console.log("🚀 Sending signup request to", signupUrl)
+      
+      const response = await fetch(signupUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -129,19 +133,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       console.log("📡 Signup response status:", response.status)
-      const data = await response.json()
+      
+      let data
+      try {
+        data = await response.json()
+        console.log("📦 Signup result:", data)
+      } catch (parseError) {
+        console.error("❌ Failed to parse response as JSON:", parseError)
+        const errorMessage = "Server returned invalid response. Please try again."
+        setError(errorMessage)
+        toast.error(errorMessage)
+        return { success: false, error: errorMessage }
+      }
       
       if (!response.ok) {
         const errorMessage = data.message || "Failed to create account. Please try again."
+        console.log("❌ Signup failed:", errorMessage)
         setError(errorMessage)
         toast.error(errorMessage)
         return { success: false, error: errorMessage }
       }
 
-      console.log("📦 Signup response data:", data)
-
       // Check if email verification is required
       if (data.requiresVerification) {
+        console.log("✅ Registration successful, verification required")
         toast.success('Registration successful! Please check your email to verify your account.')
         return { success: true, requiresVerification: true }
       }
@@ -156,6 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('💥 Signup error:', error)
       const errorMessage = "An error occurred during signup. Please try again."
+      console.log("❌ Signup failed:", errorMessage)
       setError(errorMessage)
       toast.error(errorMessage)
       return { success: false, error: errorMessage }

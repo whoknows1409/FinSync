@@ -68,17 +68,30 @@ class EmailService {
 
     try {
       logger.info(`✉️ Sending verification email to: ${email}`);
+      logger.info(`📧 Mail options:`, JSON.stringify({
+        from: mailOptions.from,
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+        hasHtml: !!mailOptions.html,
+        hasText: !!mailOptions.text
+      }));
+      
       const info = await this.transporter.sendMail(mailOptions);
       logger.info(`✅ Verification email sent successfully to: ${email}`, { messageId: info.messageId });
       return { success: true, messageId: info.messageId };
     } catch (error) {
       logger.error(`❌ Failed to send verification email to: ${email}`);
+      logger.error('❌ Error type:', error.constructor.name);
+      logger.error('❌ Error message:', error.message);
+      logger.error('❌ Error stack:', error.stack);
       logger.error('SendGrid error details:', {
         message: error.message,
         code: error.code,
         response: error.response,
         responseCode: error.responseCode,
-        command: error.command
+        command: error.command,
+        errno: error.errno,
+        syscall: error.syscall
       });
       
       // Create detailed error message
@@ -86,12 +99,16 @@ class EmailService {
       
       if (error.responseCode === 550) {
         errorMessage = 'Invalid recipient email address';
-      } else if (error.message.includes('Sender Identity')) {
+      } else if (error.message && error.message.includes('Sender Identity')) {
         errorMessage = 'Email sender not verified in SendGrid. Please contact support.';
       } else if (error.code === 'EAUTH') {
         errorMessage = 'SendGrid authentication failed. Invalid API key.';
+      } else if (error.code === 'ECONNREFUSED') {
+        errorMessage = 'Could not connect to SendGrid SMTP server. Network issue.';
       } else if (error.response) {
         errorMessage = `SendGrid Error: ${error.message}`;
+      } else if (error.message) {
+        errorMessage = error.message; // Use the actual error message
       }
       
       // Throw with detailed message
