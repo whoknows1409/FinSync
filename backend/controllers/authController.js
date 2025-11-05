@@ -27,10 +27,54 @@ exports.register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
+    // Validate input
+    if (!name || !email || !password) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Please provide name, email, and password' 
+      });
+    }
+
     // Check if user exists
     const userExists = await User.findOne({ email });
     if (userExists) {
-      return res.status(400).json({ message: 'User already exists with this email' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'User already exists with this email' 
+      });
+    }
+
+    // Check if email service is configured
+    const isEmailConfigured = process.env.EMAIL_USER && process.env.EMAIL_PASS;
+    
+    if (!isEmailConfigured) {
+      // If email is not configured, create user as verified (temporary for testing)
+      console.warn('⚠️ Email service not configured. Creating user without email verification.');
+      
+      const user = await User.create({
+        name,
+        email,
+        password,
+        authProvider: 'local',
+        isEmailVerified: true, // Auto-verify since we can't send email
+      });
+
+      const token = generateToken(user._id);
+      const refreshToken = generateRefreshToken(user._id);
+
+      return res.status(201).json({
+        success: true,
+        message: 'Registration successful! (Email verification disabled)',
+        token,
+        refreshToken,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          profileImage: user.profileImage,
+          isEmailVerified: true
+        }
+      });
     }
 
     // Generate email verification token
@@ -48,9 +92,13 @@ exports.register = async (req, res) => {
       emailVerificationExpires: verificationExpires
     });
 
+    console.log('✉️ Attempting to send verification email to:', email);
+
     // Send verification email
     try {
       await emailService.sendVerificationEmail(email, verificationToken, name);
+      
+      console.log('✅ Verification email sent successfully to:', email);
       
       res.status(201).json({
         success: true,
@@ -64,17 +112,29 @@ exports.register = async (req, res) => {
         }
       });
     } catch (emailError) {
-      console.error('Email sending failed:', emailError);
+      console.error('❌ Email sending failed:', emailError);
+      console.error('Email error details:', {
+        message: emailError.message,
+        code: emailError.code,
+        command: emailError.command
+      });
+      
       // Delete user if email fails
       await User.findByIdAndDelete(user._id);
+      
       return res.status(500).json({ 
+        success: false,
         message: 'Failed to send verification email. Please try again or contact support.',
-        error: emailError.message 
+        error: process.env.NODE_ENV === 'development' ? emailError.message : 'Email service error'
       });
     }
   } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ message: 'Server error during registration' });
+    console.error('❌ Register error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error during registration',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -88,19 +148,25 @@ exports.login = async (req, res) => {
     // Find user by email
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+      return res.status(401).json({ 
+        success: false,
+        message: 'Invalid email or password' 
+      });
     }
 
     // Check if user registered with Google OAuth
     if (user.authProvider === 'google') {
       return res.status(400).json({ 
+        success: false,
         message: 'This account was created with Google. Please sign in with Google.' 
       });
     }
 
-    // Check if email is verified
-    if (!user.isEmailVerified) {
+    // Check if email is verified (only if email service is configured)
+    const isEmailConfigured = process.env.EMAIL_USER && process.env.EMAIL_PASS;
+    if (isEmailConfigured && !user.isEmailVerified) {
       return res.status(403).json({ 
+        success: false,
         message: 'Please verify your email before logging in. Check your inbox for the verification link.',
         requiresVerification: true,
         email: user.email
@@ -110,7 +176,10 @@ exports.login = async (req, res) => {
     // Compare passwords
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+      return res.status(401).json({ 
+        success: false,
+        message: 'Invalid email or password' 
+      });
     }
 
     // Update last login
