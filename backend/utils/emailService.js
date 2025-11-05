@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const logger = require('./logger');
+const { getVerificationEmailHtml, getVerificationEmailText } = require('./emailTemplates');
 
 class EmailService {
   constructor() {
@@ -8,68 +9,43 @@ class EmailService {
   }
 
   initializeTransporter() {
-    // Check if SendGrid is configured (recommended)
-    if (process.env.SENDGRID_API_KEY) {
-      try {
-        this.transporter = nodemailer.createTransport({
-          host: 'smtp.sendgrid.net',
-          port: 587,
-          secure: false, // use TLS
-          auth: {
-            user: 'apikey', // This is always 'apikey' for SendGrid
-            pass: process.env.SENDGRID_API_KEY,
-          },
-        });
-        logger.info('✅ Email service initialized with SendGrid');
-        return;
-      } catch (error) {
-        logger.error('Failed to initialize SendGrid:', error);
-      }
-    }
-
-    // Fallback to other email services if SendGrid is not configured
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      logger.warn('⚠️ Email service not configured. SENDGRID_API_KEY or (EMAIL_USER and EMAIL_PASS) environment variables are required.');
+    // Only use SendGrid for email service
+    if (!process.env.SENDGRID_API_KEY) {
+      logger.error('❌ SendGrid API key not configured. SENDGRID_API_KEY environment variable is required.');
+      logger.error('Please add SENDGRID_API_KEY to your environment variables.');
       return;
     }
 
-    try {
-      // Create transporter based on email service
-      if (process.env.EMAIL_SERVICE === 'gmail') {
-        this.transporter = nodemailer.createTransport({
-          service: 'gmail',
-          auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS, // Use App Password for Gmail
-          },
-        });
-      } else {
-        // Generic SMTP configuration
-        this.transporter = nodemailer.createTransport({
-          host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-          port: process.env.EMAIL_PORT || 587,
-          secure: process.env.EMAIL_SECURE === 'true', // true for 465, false for other ports
-          auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS,
-          },
-        });
-      }
+    if (!process.env.EMAIL_FROM) {
+      logger.warn('⚠️ EMAIL_FROM not configured. Using default sender address.');
+    }
 
-      logger.info('✅ Email service initialized successfully');
+    try {
+      this.transporter = nodemailer.createTransport({
+        host: 'smtp.sendgrid.net',
+        port: 587,
+        secure: false, // use TLS
+        auth: {
+          user: 'apikey', // This is always 'apikey' for SendGrid
+          pass: process.env.SENDGRID_API_KEY,
+        },
+      });
+      logger.info('✅ Email service initialized with SendGrid');
+      logger.info(`📧 Using sender address: ${process.env.EMAIL_FROM || 'noreply@finsync.com'}`);
     } catch (error) {
-      logger.error('Failed to initialize email service:', error);
+      logger.error('❌ Failed to initialize SendGrid:', error);
+      throw new Error('Failed to initialize email service. Check your SendGrid configuration.');
     }
   }
 
   async sendVerificationEmail(email, verificationToken, userName) {
     if (!this.transporter) {
       logger.error('❌ Email service not configured');
-      throw new Error('Email service not configured. Please contact support.');
+      throw new Error('Email service not configured. Please set up SendGrid API key.');
     }
 
     const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
-    const fromEmail = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@finsync.com';
+    const fromEmail = process.env.EMAIL_FROM || 'noreply@finsync.com';
 
     const mailOptions = {
       from: {
@@ -78,116 +54,18 @@ class EmailService {
       },
       to: email,
       subject: 'Verify Your FinSync Account',
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <style>
-            body {
-              font-family: 'Arial', sans-serif;
-              line-height: 1.6;
-              color: #333;
-              max-width: 600px;
-              margin: 0 auto;
-              padding: 20px;
-            }
-            .container {
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              padding: 30px;
-              border-radius: 10px;
-              color: white;
-            }
-            .content {
-              background: white;
-              padding: 30px;
-              border-radius: 8px;
-              margin-top: 20px;
-              color: #333;
-            }
-            .button {
-              display: inline-block;
-              padding: 12px 30px;
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              color: white;
-              text-decoration: none;
-              border-radius: 5px;
-              margin: 20px 0;
-              font-weight: bold;
-            }
-            .footer {
-              margin-top: 20px;
-              padding-top: 20px;
-              border-top: 1px solid #eee;
-              font-size: 12px;
-              color: #666;
-              text-align: center;
-            }
-            .logo {
-              font-size: 24px;
-              font-weight: bold;
-              margin-bottom: 10px;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="logo">📊 FinSync</div>
-            <h1>Welcome to FinSync!</h1>
-          </div>
-          
-          <div class="content">
-            <h2>Hello ${userName || 'there'}! 👋</h2>
-            
-            <p>Thank you for signing up for FinSync - your personal finance management platform.</p>
-            
-            <p>To complete your registration and start managing your finances, please verify your email address by clicking the button below:</p>
-            
-            <div style="text-align: center;">
-              <a href="${verificationUrl}" class="button">Verify Email Address</a>
-            </div>
-            
-            <p>Or copy and paste this link into your browser:</p>
-            <p style="background: #f5f5f5; padding: 10px; border-radius: 5px; word-break: break-all; font-size: 12px;">
-              ${verificationUrl}
-            </p>
-            
-            <p><strong>This verification link will expire in 24 hours.</strong></p>
-            
-            <p>If you didn't create an account with FinSync, you can safely ignore this email.</p>
-            
-            <div class="footer">
-              <p>© 2025 FinSync. All rights reserved.</p>
-              <p>This is an automated email, please do not reply.</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `,
-      text: `
-        Welcome to FinSync!
-        
-        Hello ${userName || 'there'}!
-        
-        Thank you for signing up for FinSync - your personal finance management platform.
-        
-        To complete your registration, please verify your email address by visiting:
-        ${verificationUrl}
-        
-        This verification link will expire in 24 hours.
-        
-        If you didn't create an account with FinSync, you can safely ignore this email.
-        
-        © 2025 FinSync. All rights reserved.
-      `,
+      html: getVerificationEmailHtml(userName, verificationUrl),
+      text: getVerificationEmailText(userName, verificationUrl),
     };
 
     try {
+      logger.info(`✉️ Attempting to send verification email to: ${email}`);
       const info = await this.transporter.sendMail(mailOptions);
-      logger.info('Verification email sent:', { email, messageId: info.messageId });
+      logger.info(`✅ Verification email sent successfully to: ${email}`, { messageId: info.messageId });
       return { success: true, messageId: info.messageId };
     } catch (error) {
-      logger.error('Failed to send verification email:', error);
-      throw new Error('Failed to send verification email. Please try again.');
+      logger.error(`❌ Failed to send verification email to: ${email}`, error);
+      throw new Error('Failed to send verification email. Please try again or contact support.');
     }
   }
 
