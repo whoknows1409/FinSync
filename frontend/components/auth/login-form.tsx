@@ -22,11 +22,14 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [showResendVerification, setShowResendVerification] = useState(false)
+  const [resending, setResending] = useState(false)
   const { login, googleLogin, isLoading } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setShowResendVerification(false)
 
     // Basic validation
     if (!email || !password) {
@@ -44,6 +47,43 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
     const result = await login(email, password)
     if (!result.success) {
       setError(result.error || "Invalid credentials. Please try again.")
+      // Check if error is related to email verification
+      if (result.error?.toLowerCase().includes('verify')) {
+        setShowResendVerification(true)
+      }
+    }
+  }
+
+  const handleResendVerification = async () => {
+    if (!email) {
+      setError("Please enter your email address")
+      return
+    }
+
+    setResending(true)
+    
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/resend-verification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setError("")
+        alert('Verification email sent! Please check your inbox.')
+      } else {
+        setError(data.message || 'Failed to resend verification email')
+      }
+    } catch (err) {
+      console.error('Resend error:', err)
+      setError('Failed to resend verification email. Please try again.')
+    } finally {
+      setResending(false)
     }
   }
 
@@ -124,6 +164,18 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
           {error && (
             <div className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
+              {showResendVerification && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={handleResendVerification}
+                    disabled={resending}
+                    className="text-xs font-semibold text-primary hover:underline disabled:opacity-50"
+                  >
+                    {resending ? 'Sending...' : 'Resend verification email'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
           <Button type="submit" className="w-full py-4 text-base font-semibold shadow-sm" disabled={isLoading}>

@@ -8,9 +8,28 @@ class EmailService {
   }
 
   initializeTransporter() {
-    // Check if email credentials are configured
+    // Check if SendGrid is configured (recommended)
+    if (process.env.SENDGRID_API_KEY) {
+      try {
+        this.transporter = nodemailer.createTransport({
+          host: 'smtp.sendgrid.net',
+          port: 587,
+          secure: false, // use TLS
+          auth: {
+            user: 'apikey', // This is always 'apikey' for SendGrid
+            pass: process.env.SENDGRID_API_KEY,
+          },
+        });
+        logger.info('✅ Email service initialized with SendGrid');
+        return;
+      } catch (error) {
+        logger.error('Failed to initialize SendGrid:', error);
+      }
+    }
+
+    // Fallback to other email services if SendGrid is not configured
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      logger.warn('Email service not configured. EMAIL_USER and EMAIL_PASS environment variables are required.');
+      logger.warn('⚠️ Email service not configured. SENDGRID_API_KEY or (EMAIL_USER and EMAIL_PASS) environment variables are required.');
       return;
     }
 
@@ -37,7 +56,7 @@ class EmailService {
         });
       }
 
-      logger.info('Email service initialized successfully');
+      logger.info('✅ Email service initialized successfully');
     } catch (error) {
       logger.error('Failed to initialize email service:', error);
     }
@@ -45,16 +64,17 @@ class EmailService {
 
   async sendVerificationEmail(email, verificationToken, userName) {
     if (!this.transporter) {
-      logger.error('Email service not configured');
+      logger.error('❌ Email service not configured');
       throw new Error('Email service not configured. Please contact support.');
     }
 
-    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+    const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
+    const fromEmail = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@finsync.com';
 
     const mailOptions = {
       from: {
         name: 'FinSync',
-        address: process.env.EMAIL_USER,
+        address: fromEmail,
       },
       to: email,
       subject: 'Verify Your FinSync Account',
@@ -173,16 +193,17 @@ class EmailService {
 
   async sendPasswordResetEmail(email, resetToken, userName) {
     if (!this.transporter) {
-      logger.error('Email service not configured');
+      logger.error('❌ Email service not configured');
       throw new Error('Email service not configured. Please contact support.');
     }
 
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    const resetUrl = `${process.env.FRONTEND_URL}/auth/reset-password?token=${resetToken}`;
+    const fromEmail = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@finsync.com';
 
     const mailOptions = {
       from: {
         name: 'FinSync',
-        address: process.env.EMAIL_USER,
+        address: fromEmail,
       },
       to: email,
       subject: 'Reset Your FinSync Password',
@@ -307,14 +328,16 @@ class EmailService {
 
   async sendWelcomeEmail(email, userName) {
     if (!this.transporter) {
-      logger.warn('Email service not configured, skipping welcome email');
+      logger.warn('⚠️ Email service not configured, skipping welcome email');
       return { success: false, message: 'Email service not configured' };
     }
+
+    const fromEmail = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@finsync.com';
 
     const mailOptions = {
       from: {
         name: 'FinSync',
-        address: process.env.EMAIL_USER,
+        address: fromEmail,
       },
       to: email,
       subject: '🎉 Welcome to FinSync!',

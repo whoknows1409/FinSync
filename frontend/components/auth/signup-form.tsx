@@ -25,6 +25,7 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
   const [error, setError] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [passwordStrength, setPasswordStrength] = useState(0)
+  const [verificationSent, setVerificationSent] = useState(false)
   const { signup, googleLogin, isLoading } = useAuth()
 
   const checkPasswordStrength = (password: string) => {
@@ -84,6 +85,11 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
         setError(result.error || "Failed to create account. Please try again.")
       } else {
         console.log("✅ Signup successful!")
+        // Check if verification is required
+        if (result.requiresVerification) {
+          setVerificationSent(true)
+        }
+        // If no verification required, user will be redirected automatically by auth context
       }
     } catch (err) {
       console.error("💥 Unexpected error during signup:", err)
@@ -131,7 +137,33 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        <CustomGoogleButton text="Sign up with Google" onGoogleSignIn={handleGoogleSignIn} />
+        {verificationSent ? (
+          <div className="space-y-4 rounded-lg border border-green-200 bg-green-50 p-6 text-center dark:border-green-800 dark:bg-green-950">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
+              <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold text-green-900 dark:text-green-100">Check your email!</h3>
+              <p className="text-sm text-green-700 dark:text-green-300">
+                We've sent a verification link to <strong>{email}</strong>
+              </p>
+              <p className="text-xs text-green-600 dark:text-green-400">
+                Please check your inbox and click the verification link to activate your account.
+              </p>
+            </div>
+            <div className="pt-4">
+              <button
+                type="button"
+                onClick={onToggleMode}
+                className="text-sm font-semibold text-primary hover:underline"
+              >
+                Back to Sign In
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <CustomGoogleButton text="Sign up with Google" onGoogleSignIn={handleGoogleSignIn} />
 
         <div className="relative text-center">
           <Separator className="bg-border/60" />
@@ -276,6 +308,8 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
             Sign in
           </button>
         </div>
+          </>
+        )}
       </CardContent>
     </Card>
   )

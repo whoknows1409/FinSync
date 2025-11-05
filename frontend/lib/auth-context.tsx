@@ -18,7 +18,7 @@ interface User {
 interface AuthContextType {
   user: User | null
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
-  signup: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string }>
+  signup: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string; requiresVerification?: boolean }>
   googleLogin: (token: string) => Promise<{ success: boolean; error?: string }>
   logout: () => void
   updateUser: (userData: Partial<User>) => Promise<void>
@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const signup = async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string }> => {
+  const signup = async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string; requiresVerification?: boolean }> => {
     setIsLoading(true)
     setError(null)
     try {
@@ -140,6 +140,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log("📦 Signup response data:", data)
 
+      // Check if email verification is required
+      if (data.requiresVerification) {
+        toast.success('Registration successful! Please check your email to verify your account.')
+        return { success: true, requiresVerification: true }
+      }
+
+      // If no verification required, log user in
       const { user, token } = data
       setUser(user)
       localStorage.setItem("finsync-user", JSON.stringify(user))

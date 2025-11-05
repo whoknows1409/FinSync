@@ -44,39 +44,6 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Check if email service is configured
-    const isEmailConfigured = process.env.EMAIL_USER && process.env.EMAIL_PASS;
-    
-    if (!isEmailConfigured) {
-      // If email is not configured, create user as verified (temporary for testing)
-      console.warn('⚠️ Email service not configured. Creating user without email verification.');
-      
-      const user = await User.create({
-        name,
-        email,
-        password,
-        authProvider: 'local',
-        isEmailVerified: true, // Auto-verify since we can't send email
-      });
-
-      const token = generateToken(user._id);
-      const refreshToken = generateRefreshToken(user._id);
-
-      return res.status(201).json({
-        success: true,
-        message: 'Registration successful! (Email verification disabled)',
-        token,
-        refreshToken,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          profileImage: user.profileImage,
-          isEmailVerified: true
-        }
-      });
-    }
-
     // Generate email verification token
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
@@ -162,9 +129,8 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Check if email is verified (only if email service is configured)
-    const isEmailConfigured = process.env.EMAIL_USER && process.env.EMAIL_PASS;
-    if (isEmailConfigured && !user.isEmailVerified) {
+    // Check if email is verified
+    if (!user.isEmailVerified) {
       return res.status(403).json({ 
         success: false,
         message: 'Please verify your email before logging in. Check your inbox for the verification link.',
