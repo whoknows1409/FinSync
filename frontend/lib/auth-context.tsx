@@ -127,7 +127,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache'
         },
         body: JSON.stringify({ email, password, name }),
       })
