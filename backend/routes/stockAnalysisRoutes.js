@@ -152,32 +152,56 @@ router.get('/historical-data', async (req, res) => {
 
 // Route to compare two stocks
 router.get('/compare', async (req, res) => {
+  // Set CORS headers explicitly for this endpoint
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+
   try {
-    console.log('Stock comparison request received:', req.query);
+    console.log('=== Stock Comparison Request ===');
+    console.log('Query params:', req.query);
+    console.log('Origin:', req.headers.origin);
     
     const { symbol1, symbol2 } = req.query;
     
     if (!symbol1 || !symbol2) {
-      console.log('Missing symbols in request');
+      console.log('ERROR: Missing symbols in request');
       return res.status(400).json({ error: 'Both stock symbols are required' });
     }
 
     console.log(`Fetching data for ${symbol1} and ${symbol2}`);
 
-    // Fetch data for both stocks with timeout
-    const fetchWithTimeout = (promise, timeout = 10000) => {
+    // Fetch data for both stocks with timeout and better error handling
+    const fetchWithTimeout = (promise, timeout = 15000) => {
       return Promise.race([
         promise,
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timeout')), timeout)
+          setTimeout(() => reject(new Error('Request timeout after 15 seconds')), timeout)
         )
       ]);
     };
 
-    const [quote1, quote2] = await Promise.all([
-      fetchWithTimeout((await getYahooFinance()).quote(symbol1)),
-      fetchWithTimeout((await getYahooFinance()).quote(symbol2))
-    ]);
+    let quote1, quote2;
+    try {
+      const yahooFinance = await getYahooFinance();
+      [quote1, quote2] = await Promise.all([
+        fetchWithTimeout(yahooFinance.quote(symbol1)).catch(err => {
+          console.error(`Error fetching ${symbol1}:`, err.message);
+          throw new Error(`Failed to fetch data for ${symbol1}: ${err.message}`);
+        }),
+        fetchWithTimeout(yahooFinance.quote(symbol2)).catch(err => {
+          console.error(`Error fetching ${symbol2}:`, err.message);
+          throw new Error(`Failed to fetch data for ${symbol2}: ${err.message}`);
+        })
+      ]);
+    } catch (fetchError) {
+      console.error('Yahoo Finance fetch error:', fetchError);
+      return res.status(500).json({ 
+        error: 'Failed to fetch stock data from Yahoo Finance',
+        details: fetchError.message
+      });
+    }
 
     console.log('Successfully fetched stock data from Yahoo Finance');
 
@@ -200,6 +224,7 @@ router.get('/compare', async (req, res) => {
     try {
       aiSummary = await geminiService.compareStocks(stock1, stock2);
       aiSummary = aiSummary.trim();
+      console.log('AI comparison generated successfully');
     } catch (aiError) {
       console.error('AI comparison failed, using fallback:', aiError);
       aiSummary = `Comparison between ${stock1.name} (${stock1.symbol}) and ${stock2.name} (${stock2.symbol}): 
@@ -212,17 +237,18 @@ Please analyze the detailed metrics below to make an informed investment decisio
 
     console.log('Sending comparison response');
 
-    res.json({
+    return res.status(200).json({
       stock1,
       stock2,
       aiSummary
     });
   } catch (error) {
-    console.error('Error comparing stocks:', error);
-    console.error('Error stack:', error.stack);
+    console.error('=== ERROR in Stock Comparison ===');
+    console.error('Error:', error);
+    console.error('Stack:', error.stack);
     
-    // Return a proper error response
-    res.status(500).json({ 
+    // Always return a proper JSON response
+    return res.status(500).json({ 
       error: 'Failed to compare stocks',
       details: error.message,
       symbols: req.query
