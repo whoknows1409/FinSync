@@ -644,15 +644,17 @@ export default function HomePage() {
 
       {/* Auth Dialog */}
       <Dialog open={showAuth} onOpenChange={setShowAuth}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{authMode === "login" ? "Welcome back to FinSync" : "Start your financial journey"}</DialogTitle>
-            <DialogDescription>
-              {authMode === "login"
-                ? "Sign in to access your dashboard and continue managing your finances."
-                : "Create your free account and unlock powerful financial tools."}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-w-[95vw] sm:max-w-md md:max-w-lg max-h-[90vh] overflow-y-auto p-0">
+          <div className="p-6">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">{authMode === "login" ? "Welcome back to FinSync" : "Start your financial journey"}</DialogTitle>
+              <DialogDescription className="text-sm">
+                {authMode === "login"
+                  ? "Sign in to access your dashboard and continue managing your finances."
+                  : "Create your free account and unlock powerful financial tools."}
+              </DialogDescription>
+            </DialogHeader>
+          </div>
           {authMode === "login" ? (
             <LoginForm onToggleMode={toggleAuthMode} />
           ) : (

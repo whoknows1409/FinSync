@@ -121,41 +121,41 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
   }
 
   return (
-    <Card className="w-full max-w-lg border-border/60 bg-background/95 shadow-lg shadow-primary/5 backdrop-blur">
-      <CardHeader className="space-y-3 text-center">
-        <div className="flex items-center justify-center gap-2">
-          <Badge variant="outline" className="border-primary/40 bg-primary/5 text-primary">
+    <Card className="w-full border-0 shadow-none bg-transparent">
+      <CardHeader className="space-y-2 sm:space-y-3 px-4 sm:px-6">
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Badge variant="outline" className="border-primary/40 bg-primary/5 text-primary text-xs">
             Start your journey
           </Badge>
           <span className="text-xs text-muted-foreground">Free plan available</span>
         </div>
-        <div className="space-y-2">
-          <CardTitle className="text-2xl font-bold">Create your Finsync account</CardTitle>
-          <CardDescription className="mx-auto max-w-md text-base">
+        <div className="space-y-1 sm:space-y-2">
+          <CardTitle className="text-xl sm:text-2xl font-bold text-center">Create your Finsync account</CardTitle>
+          <CardDescription className="mx-auto max-w-md text-sm sm:text-base text-center px-2">
             Set up your profile, connect accounts, and unlock intelligent budgeting, investing, and trading tools.
           </CardDescription>
         </div>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4 sm:space-y-6 px-4 sm:px-6">
         {verificationSent ? (
-          <div className="space-y-4 rounded-lg border border-green-200 bg-green-50 p-6 text-center dark:border-green-800 dark:bg-green-950">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
-              <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+          <div className="space-y-3 sm:space-y-4 rounded-lg border border-green-200 bg-green-50 p-4 sm:p-6 text-center dark:border-green-800 dark:bg-green-950">
+            <div className="mx-auto flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
+              <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
             </div>
             <div className="space-y-2">
-              <h3 className="text-lg font-semibold text-green-900 dark:text-green-100">Check your email!</h3>
-              <p className="text-sm text-green-700 dark:text-green-300">
-                We've sent a verification link to <strong>{email}</strong>
+              <h3 className="text-base sm:text-lg font-semibold text-green-900 dark:text-green-100">Check your email!</h3>
+              <p className="text-xs sm:text-sm text-green-700 dark:text-green-300">
+                We've sent a verification link to <strong className="break-all">{email}</strong>
               </p>
               <p className="text-xs text-green-600 dark:text-green-400">
                 Please check your inbox and click the verification link to activate your account.
               </p>
             </div>
-            <div className="pt-4">
+            <div className="pt-2 sm:pt-4">
               <button
                 type="button"
                 onClick={onToggleMode}
-                className="text-sm font-semibold text-primary hover:underline"
+                className="text-xs sm:text-sm font-semibold text-primary hover:underline"
               >
                 Back to Sign In
               </button>
@@ -167,14 +167,14 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
 
         <div className="relative text-center">
           <Separator className="bg-border/60" />
-          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-4 text-xs font-medium text-muted-foreground">
-            or create your account with email
+          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 sm:px-4 text-xs font-medium text-muted-foreground whitespace-nowrap">
+            or create your account
           </span>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="name">Full Name</Label>
+            <Label htmlFor="name" className="text-sm">Full Name</Label>
             <Input
               id="name"
               type="text"
@@ -183,10 +183,11 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
               onChange={(e) => setName(e.target.value)}
               required
               autoComplete="name"
+              className="h-10 sm:h-11"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email" className="text-sm">Email</Label>
             <Input
               id="email"
               type="email"
@@ -195,10 +196,11 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
               onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="email"
+              className="h-10 sm:h-11"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password" className="text-sm">Password</Label>
             <div className="relative">
               <Input
                 id="password"
@@ -209,6 +211,7 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
                 required
                 autoComplete="new-password"
                 minLength={8}
+                className="h-10 sm:h-11 pr-10"
               />
               <Button
                 type="button"
@@ -225,56 +228,56 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
               </Button>
             </div>
             {password && (
-              <div className="mt-3 space-y-3 rounded-lg border border-border/60 bg-muted/30 p-4">
+              <div className="mt-2 sm:mt-3 space-y-2 sm:space-y-3 rounded-lg border border-border/60 bg-muted/30 p-3 sm:p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Password strength:</span>
                   <span className="text-xs font-medium">{getPasswordStrengthText()}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-1.5">
                   <div
-                    className={`h-1.5 rounded-full ${getPasswordStrengthColor()}`}
+                    className={`h-1.5 rounded-full transition-all ${getPasswordStrengthColor()}`}
                     style={{ width: `${(passwordStrength / 4) * 100}%` }}
                   />
                 </div>
-                <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                <div className="grid gap-1.5 sm:gap-2 text-xs text-muted-foreground grid-cols-1 sm:grid-cols-2">
                   <div className="flex items-center">
                     {password.length >= 8 ? (
-                      <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
+                      <CheckCircle className="h-3 w-3 text-green-500 mr-1 shrink-0" />
                     ) : (
-                      <XCircle className="h-3 w-3 text-red-500 mr-1" />
+                      <XCircle className="h-3 w-3 text-red-500 mr-1 shrink-0" />
                     )}
-                    At least 8 characters
+                    <span className="text-xs">At least 8 characters</span>
                   </div>
                   <div className="flex items-center">
                     {/[A-Z]/.test(password) ? (
-                      <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
+                      <CheckCircle className="h-3 w-3 text-green-500 mr-1 shrink-0" />
                     ) : (
-                      <XCircle className="h-3 w-3 text-red-500 mr-1" />
+                      <XCircle className="h-3 w-3 text-red-500 mr-1 shrink-0" />
                     )}
-                    Uppercase letter
+                    <span className="text-xs">Uppercase letter</span>
                   </div>
                   <div className="flex items-center">
                     {/[0-9]/.test(password) ? (
-                      <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
+                      <CheckCircle className="h-3 w-3 text-green-500 mr-1 shrink-0" />
                     ) : (
-                      <XCircle className="h-3 w-3 text-red-500 mr-1" />
+                      <XCircle className="h-3 w-3 text-red-500 mr-1 shrink-0" />
                     )}
-                    Number
+                    <span className="text-xs">Number</span>
                   </div>
                   <div className="flex items-center">
                     {/[^A-Za-z0-9]/.test(password) ? (
-                      <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
+                      <CheckCircle className="h-3 w-3 text-green-500 mr-1 shrink-0" />
                     ) : (
-                      <XCircle className="h-3 w-3 text-red-500 mr-1" />
+                      <XCircle className="h-3 w-3 text-red-500 mr-1 shrink-0" />
                     )}
-                    Special character
+                    <span className="text-xs">Special character</span>
                   </div>
                 </div>
               </div>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm Password</Label>
+            <Label htmlFor="confirmPassword" className="text-sm">Confirm Password</Label>
             <Input
               id="confirmPassword"
               type="password"
@@ -283,14 +286,15 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               autoComplete="new-password"
+              className="h-10 sm:h-11"
             />
           </div>
           {error && (
-            <div className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <div className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs sm:text-sm text-destructive">
               {error}
             </div>
           )}
-          <Button type="submit" className="w-full py-4 text-base font-semibold shadow-sm" disabled={isLoading}>
+          <Button type="submit" className="w-full h-11 sm:h-12 text-sm sm:text-base font-semibold shadow-sm" disabled={isLoading}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -302,7 +306,7 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
           </Button>
         </form>
 
-        <div className="text-center text-sm">
+        <div className="text-center text-xs sm:text-sm">
           Already have an account?{" "}
           <button type="button" onClick={onToggleMode} className="font-semibold text-primary hover:underline">
             Sign in
