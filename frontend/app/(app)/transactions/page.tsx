@@ -20,35 +20,38 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 p-4 md:p-0">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Transactions</h1>
-          <p className="text-muted-foreground">Manage your income and expenses</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Transactions</h1>
+          <p className="text-muted-foreground text-sm sm:text-base">Manage your income and expenses</p>
         </div>
-        <Button onClick={handleExport} variant="outline">
+        <Button onClick={handleExport} variant="outline" className="w-full sm:w-auto">
           <Download className="mr-2 h-4 w-4" />
           Export
         </Button>
       </div>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList>
-          <TabsTrigger value="overview" className="flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Overview
+        <TabsList className="w-full grid grid-cols-2 sm:grid-cols-4 h-auto sm:h-10">
+          <TabsTrigger value="overview" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm py-2">
+            <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span className="hidden xs:inline">Overview</span>
+            <span className="xs:hidden">Add</span>
           </TabsTrigger>
-          <TabsTrigger value="history" className="flex items-center gap-2">
-            <History className="h-4 w-4" />
+          <TabsTrigger value="history" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm py-2">
+            <History className="h-3 w-3 sm:h-4 sm:w-4" />
             History
           </TabsTrigger>
-          <TabsTrigger value="recurring" className="flex items-center gap-2">
-            <Repeat className="h-4 w-4" />
-            Recurring
+          <TabsTrigger value="recurring" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm py-2">
+            <Repeat className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span className="hidden xs:inline">Recurring</span>
+            <span className="xs:hidden">Repeat</span>
           </TabsTrigger>
-          <TabsTrigger value="analysis" className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Analysis
+          <TabsTrigger value="analysis" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm py-2">
+            <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span className="hidden xs:inline">Analysis</span>
+            <span className="xs:hidden">Stats</span>
           </TabsTrigger>
         </TabsList>
 
