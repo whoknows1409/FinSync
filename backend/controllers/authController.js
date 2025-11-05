@@ -24,6 +24,8 @@ const generateRefreshToken = (id) => {
 // @route   POST /api/auth/register
 // @access  Public
 exports.register = async (req, res) => {
+  let user = null;
+  
   try {
     const { name, email, password } = req.body;
 
@@ -46,13 +48,13 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Check if email service is available
+    // Check if email service is available BEFORE creating user
     if (!emailService.transporter) {
       console.error('❌ Email service not initialized');
       return res.status(503).json({
         success: false,
-        message: 'Email service is not configured. Please contact the administrator.',
-        error: 'Email service unavailable'
+        message: 'Email service is temporarily unavailable. Please try again later or contact support.',
+        error: 'Email service not configured'
       });
     }
 
@@ -61,7 +63,7 @@ exports.register = async (req, res) => {
     const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     // Create user (not verified yet)
-    const user = await User.create({
+    user = await User.create({
       name,
       email,
       password,
@@ -72,13 +74,13 @@ exports.register = async (req, res) => {
     });
 
     console.log('✅ User created:', user._id);
-    console.log('✉️ Attempting to send verification email to:', email);
+    console.log('✉️ Sending verification email to:', email);
 
-    // Send verification email
+    // Send verification email - if this fails, delete the user
     try {
-      await emailService.sendVerificationEmail(email, verificationToken, name);
+      const emailResult = await emailService.sendVerificationEmail(email, verificationToken, name);
       
-      console.log('✅ Verification email sent successfully to:', email);
+      console.log('✅ Verification email sent successfully:', emailResult);
       
       return res.status(201).json({
         success: true,
@@ -92,27 +94,34 @@ exports.register = async (req, res) => {
         }
       });
     } catch (emailError) {
-      console.error('❌ Email sending failed:', emailError);
-      console.error('Email error details:', {
-        message: emailError.message,
-        code: emailError.code,
-        command: emailError.command,
-        stack: emailError.stack
-      });
+      console.error('❌ Email sending failed:', emailError.message);
+      console.error('Full error:', emailError);
       
-      // Delete user if email fails
-      await User.findByIdAndDelete(user._id);
-      console.log('🗑️ User deleted due to email failure');
+      // CRITICAL: Delete user if email fails - atomic operation
+      if (user && user._id) {
+        await User.findByIdAndDelete(user._id);
+        console.log('🗑️ User deleted due to email failure:', user._id);
+      }
       
       return res.status(500).json({ 
         success: false,
-        message: 'Failed to send verification email. Please check your email address and try again.',
-        error: process.env.NODE_ENV === 'development' ? emailError.message : 'Email service error'
+        message: 'Failed to send verification email. Registration cancelled. Please try again.',
+        error: process.env.NODE_ENV === 'development' ? emailError.message : 'Email delivery failed'
       });
     }
   } catch (error) {
     console.error('❌ Register error:', error);
     console.error('Error stack:', error.stack);
+    
+    // If user was created but there was an error, clean up
+    if (user && user._id) {
+      try {
+        await User.findByIdAndDelete(user._id);
+        console.log('🗑️ Cleanup: User deleted after error:', user._id);
+      } catch (cleanupError) {
+        console.error('❌ Failed to cleanup user:', cleanupError);
+      }
+    }
     
     // Ensure we always return JSON
     return res.status(500).json({ 

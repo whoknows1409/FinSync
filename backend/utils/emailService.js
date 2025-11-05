@@ -43,12 +43,17 @@ class EmailService {
 
   async sendVerificationEmail(email, verificationToken, userName) {
     if (!this.transporter) {
+      const error = new Error('Email service not configured. Please set up SendGrid API key.');
       logger.error('❌ Email service not configured');
-      throw new Error('Email service not configured. Please set up SendGrid API key.');
+      throw error;
     }
 
     const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
     const fromEmail = process.env.EMAIL_FROM || 'noreply@finsync.com';
+
+    logger.info(`📧 Preparing verification email for: ${email}`);
+    logger.info(`📧 From: ${fromEmail}`);
+    logger.info(`📧 Verification URL: ${verificationUrl}`);
 
     const mailOptions = {
       from: {
@@ -62,7 +67,7 @@ class EmailService {
     };
 
     try {
-      logger.info(`✉️ Attempting to send verification email to: ${email}`);
+      logger.info(`✉️ Sending verification email to: ${email}`);
       const info = await this.transporter.sendMail(mailOptions);
       logger.info(`✅ Verification email sent successfully to: ${email}`, { messageId: info.messageId });
       return { success: true, messageId: info.messageId };
@@ -76,12 +81,23 @@ class EmailService {
         command: error.command
       });
       
-      // Throw the original error with more context
-      const errorMessage = error.response ? 
-        `SendGrid Error: ${error.message} - ${error.response}` : 
-        `Email Error: ${error.message}`;
+      // Create detailed error message
+      let errorMessage = 'Failed to send verification email';
       
-      throw new Error(errorMessage);
+      if (error.responseCode === 550) {
+        errorMessage = 'Invalid recipient email address';
+      } else if (error.message.includes('Sender Identity')) {
+        errorMessage = 'Email sender not verified in SendGrid. Please contact support.';
+      } else if (error.code === 'EAUTH') {
+        errorMessage = 'SendGrid authentication failed. Invalid API key.';
+      } else if (error.response) {
+        errorMessage = `SendGrid Error: ${error.message}`;
+      }
+      
+      // Throw with detailed message
+      const detailedError = new Error(errorMessage);
+      detailedError.originalError = error;
+      throw detailedError;
     }
   }
 
