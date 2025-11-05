@@ -4,8 +4,8 @@ const axios = require('axios');
 class GeminiAPI {
   constructor() {
     this.apiKey = process.env.GEMINI_API_KEY;
-    // Updated to use gemini-1.5-flash model
-    this.baseUrl = process.env.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+    // Updated to use gemini-2.5-flash model (latest stable)
+    this.baseUrl = process.env.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
     
     if (!this.apiKey) {
       logger.warn('Gemini API key not configured');
