@@ -1,5 +1,15 @@
 const express = require('express');
 const router = express.Router();
+
+// Enable preflight for all routes in this router
+router.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
+
 let yahooFinanceInstance;
 async function getYahooFinance() {
   if (!yahooFinanceInstance) {
@@ -152,27 +162,39 @@ router.get('/historical-data', async (req, res) => {
 // Route to compare two stocks
 router.get('/compare', async (req, res) => {
   try {
+    console.log('Stock comparison request received:', req.query);
+    
     const { symbol1, symbol2 } = req.query;
     
     if (!symbol1 || !symbol2) {
+      console.log('Missing symbols in request');
       return res.status(400).json({ error: 'Both stock symbols are required' });
     }
 
-    // Fetch data for both stocks
+    console.log(`Fetching data for ${symbol1} and ${symbol2}`);
+
+    // Fetch data for both stocks with timeout
+    const fetchWithTimeout = (promise, timeout = 10000) => {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout')), timeout)
+        )
+      ]);
+    };
+
     const [quote1, quote2] = await Promise.all([
-      (await getYahooFinance()).quote(symbol1),
-      (await getYahooFinance()).quote(symbol2)
+      fetchWithTimeout((await getYahooFinance()).quote(symbol1)),
+      fetchWithTimeout((await getYahooFinance()).quote(symbol2))
     ]);
+
+    console.log('Successfully fetched stock data from Yahoo Finance');
 
     // Format stock data with fallbacks
     let stock1 = formatStockData(quote1);
     let stock2 = formatStockData(quote2);
 
-    // Calculate monthly change for both stocks
-    const now = new Date();
-    const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    
-    // Historical not available; approximate monthly change as 0 in this build
+    // Calculate monthly change for both stocks (approximate as 0 in this build)
     const monthlyChange1 = 0;
     const monthlyChange2 = 0;
 
@@ -180,17 +202,40 @@ router.get('/compare', async (req, res) => {
     stock1.monthlyChange = monthlyChange1;
     stock2.monthlyChange = monthlyChange2;
 
-    // Generate AI comparison summary
-    const aiSummary = await geminiService.compareStocks(stock1, stock2);
+    console.log('Generating AI comparison summary');
+
+    // Generate AI comparison summary with error handling
+    let aiSummary = '';
+    try {
+      aiSummary = await geminiService.compareStocks(stock1, stock2);
+      aiSummary = aiSummary.trim();
+    } catch (aiError) {
+      console.error('AI comparison failed, using fallback:', aiError);
+      aiSummary = `Comparison between ${stock1.name} (${stock1.symbol}) and ${stock2.name} (${stock2.symbol}): 
+      
+${stock1.name} is trading at ₹${stock1.currentPrice.toFixed(2)} with a market cap of ₹${(stock1.marketCap / 10000000).toFixed(2)} Cr.
+${stock2.name} is trading at ₹${stock2.currentPrice.toFixed(2)} with a market cap of ₹${(stock2.marketCap / 10000000).toFixed(2)} Cr.
+
+Please analyze the detailed metrics below to make an informed investment decision.`;
+    }
+
+    console.log('Sending comparison response');
 
     res.json({
       stock1,
       stock2,
-      aiSummary: aiSummary.trim()
+      aiSummary
     });
   } catch (error) {
-    logger.error('Error comparing stocks:', error);
-    res.status(500).json({ error: 'Failed to compare stocks' });
+    console.error('Error comparing stocks:', error);
+    console.error('Error stack:', error.stack);
+    
+    // Return a proper error response
+    res.status(500).json({ 
+      error: 'Failed to compare stocks',
+      details: error.message,
+      symbols: req.query
+    });
   }
 });
 
