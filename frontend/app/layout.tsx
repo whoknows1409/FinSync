@@ -21,10 +21,10 @@ export const metadata: Metadata = {
   generator: 'v0.app',
   icons: {
     icon: [
-      { url: '/finsync-logo.svg', type: 'image/svg+xml' },
-      { url: '/favicon.svg', type: 'image/svg+xml' }
+      { url: '/finsync-logo.png', type: 'image/png' },
+      { url: '/favicon.png', type: 'image/png' }
     ],
-    apple: '/finsync-logo.svg',
+    apple: '/finsync-logo.png',
   }
 }
 

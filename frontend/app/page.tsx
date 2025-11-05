@@ -90,7 +90,7 @@ export default function HomePage() {
           <div className="flex items-center gap-2">
             <div className="flex h-10 w-10 items-center justify-center">
               <Image
-                src="/finsync-logo.svg"
+                src="/finsync-logo.png"
                 alt="FinSync Logo"
                 width={40}
                 height={40}

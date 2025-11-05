@@ -19,7 +19,7 @@ function FinsyncLogo() {
   return (
     <div className="h-10 w-10 flex items-center justify-center">
       <Image
-        src="/finsync-logo.svg"
+        src="/finsync-logo.png"
         alt="FinSync Logo"
         width={40}
         height={40}
