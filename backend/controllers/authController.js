@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
+const emailService = require('../utils/emailService');
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -31,26 +33,45 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: 'User already exists with this email' });
     }
 
-    // Create user
+    // Generate email verification token
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    // Create user (not verified yet)
     const user = await User.create({
       name,
       email,
       password,
+      authProvider: 'local',
+      isEmailVerified: false,
+      emailVerificationToken: verificationToken,
+      emailVerificationExpires: verificationExpires
     });
 
-    // Generate token
-    const token = generateToken(user._id);
-
-    res.status(201).json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        profileImage: user.profileImage
-      }
-    });
+    // Send verification email
+    try {
+      await emailService.sendVerificationEmail(email, verificationToken, name);
+      
+      res.status(201).json({
+        success: true,
+        message: 'Registration successful! Please check your email to verify your account.',
+        requiresVerification: true,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          isEmailVerified: false
+        }
+      });
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError);
+      // Delete user if email fails
+      await User.findByIdAndDelete(user._id);
+      return res.status(500).json({ 
+        message: 'Failed to send verification email. Please try again or contact support.',
+        error: emailError.message 
+      });
+    }
   } catch (error) {
     console.error('Register error:', error);
     res.status(500).json({ message: 'Server error during registration' });
@@ -69,12 +90,32 @@ exports.login = async (req, res) => {
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
+
+    // Check if user registered with Google OAuth
+    if (user.authProvider === 'google') {
+      return res.status(400).json({ 
+        message: 'This account was created with Google. Please sign in with Google.' 
+      });
+    }
+
+    // Check if email is verified
+    if (!user.isEmailVerified) {
+      return res.status(403).json({ 
+        message: 'Please verify your email before logging in. Check your inbox for the verification link.',
+        requiresVerification: true,
+        email: user.email
+      });
+    }
     
     // Compare passwords
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
+
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
     
     // Generate token
     const token = generateToken(user._id);
@@ -216,6 +257,119 @@ exports.googleAuth = async (req, res) => {
       success: false,
       message: 'Google authentication failed',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+// @desc    Verify email address
+// @route   GET /api/auth/verify-email/:token
+// @access  Public
+exports.verifyEmail = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    // Find user with valid token
+    const user = await User.findOne({
+      emailVerificationToken: token,
+      emailVerificationExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid or expired verification token. Please request a new one.' 
+      });
+    }
+
+    // Mark email as verified
+    user.isEmailVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpires = undefined;
+    await user.save();
+
+    // Send welcome email
+    try {
+      await emailService.sendWelcomeEmail(user.email, user.name);
+    } catch (emailError) {
+      console.error('Failed to send welcome email:', emailError);
+      // Don't fail verification if welcome email fails
+    }
+
+    // Generate token for auto-login
+    const authToken = generateToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Email verified successfully! You can now log in.',
+      token: authToken,
+      refreshToken,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        profileImage: user.profileImage,
+        isEmailVerified: true
+      }
+    });
+  } catch (error) {
+    console.error('Email verification error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error during email verification' 
+    });
+  }
+};
+
+// @desc    Resend verification email
+// @route   POST /api/auth/resend-verification
+// @access  Public
+exports.resendVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'No account found with this email address' 
+      });
+    }
+
+    if (user.isEmailVerified) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Email is already verified. You can log in now.' 
+      });
+    }
+
+    if (user.authProvider === 'google') {
+      return res.status(400).json({ 
+        success: false,
+        message: 'This account uses Google sign-in and is already verified.' 
+      });
+    }
+
+    // Generate new verification token
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    user.emailVerificationToken = verificationToken;
+    user.emailVerificationExpires = verificationExpires;
+    await user.save();
+
+    // Send verification email
+    await emailService.sendVerificationEmail(user.email, verificationToken, user.name);
+
+    res.status(200).json({
+      success: true,
+      message: 'Verification email sent! Please check your inbox.'
+    });
+  } catch (error) {
+    console.error('Resend verification error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to resend verification email. Please try again.' 
     });
   }
 };
