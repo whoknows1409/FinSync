@@ -157,35 +157,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const googleLogin = async (token: string): Promise<{ success: boolean; error?: string }> => {
+  const googleLogin = async (credential: string): Promise<{ success: boolean; error?: string }> => {
+    setIsLoading(true)
+    setError(null)
     try {
-      // Persist token
-      localStorage.setItem("token", token)
-
-      // Fetch current user from backend using the token
-      const response = await fetch('/api/auth/me', {
+      console.log('🔐 Sending Google credential to backend for verification...')
+      
+      const response = await fetch('/api/auth/google', {
+        method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
           'Cache-Control': 'no-cache'
-        }
+        },
+        body: JSON.stringify({ credential }),
       })
 
+      console.log('📡 Google auth response status:', response.status)
+      const data = await response.json()
+      console.log('📦 Google auth response data:', data)
+
       if (!response.ok) {
-        const text = await response.text()
-        localStorage.removeItem("token")
-        return { success: false, error: text || 'Failed to fetch user' }
+        const errorMessage = data.message || 'Google authentication failed'
+        setError(errorMessage)
+        toast.error(errorMessage)
+        return { success: false, error: errorMessage }
       }
 
-      const data = await response.json()
-      const currentUser = data?.user || data?.data || data
-      setUser(currentUser)
-      localStorage.setItem("finsync-user", JSON.stringify(currentUser))
-      toast.success('Logged in with Google')
+      const { user, token, refreshToken } = data
+      setUser(user)
+      localStorage.setItem("finsync-user", JSON.stringify(user))
+      localStorage.setItem("token", token)
+      if (refreshToken) {
+        localStorage.setItem("refreshToken", refreshToken)
+      }
+      
+      console.log('✅ Google authentication successful')
+      toast.success('Successfully logged in with Google!')
       return { success: true }
     } catch (err) {
-      console.error('Google login error:', err)
-      localStorage.removeItem("token")
-      return { success: false, error: err instanceof Error ? err.message : 'Google login failed' }
+      console.error('❌ Google login error:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Google login failed'
+      setError(errorMessage)
+      toast.error(errorMessage)
+      return { success: false, error: errorMessage }
+    } finally {
+      setIsLoading(false)
     }
   }
 
