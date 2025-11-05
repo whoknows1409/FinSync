@@ -74,15 +74,15 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto py-4 sm:py-6 px-4 sm:px-6 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Settings</h1>
-          <p className="text-muted-foreground">Manage your account and application preferences</p>
+          <h1 className="text-2xl sm:text-3xl font-bold">Settings</h1>
+          <p className="text-muted-foreground text-sm sm:text-base">Manage your account and application preferences</p>
         </div>
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid gap-4 sm:gap-6">
         {/* Profile Settings */}
         <Card>
           <CardHeader>
@@ -118,7 +118,7 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="name">Name</Label>
                 <Input id="name" defaultValue={user?.name} />

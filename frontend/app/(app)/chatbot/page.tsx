@@ -716,28 +716,28 @@ export default function ChatbotPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Finsync AI Chatbot</h1>
-          <p className="text-muted-foreground">Get personalized financial advice from our AI assistant</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Finsync AI Chatbot</h1>
+          <p className="text-muted-foreground text-sm sm:text-base">Get personalized financial advice from our AI assistant</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
           {/* Insights Summary Card */}
           {insights && (
-            <Card className="w-auto border-0 shadow-none bg-transparent">
-              <CardContent className="p-3 flex items-center gap-3">
+            <Card className="w-full sm:w-auto border-0 shadow-none bg-transparent">
+              <CardContent className="p-3 flex flex-wrap items-center gap-2 sm:gap-3">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-medium">{insights.questionsThisWeek} this week</span>
+                  <span className="text-xs sm:text-sm font-medium">{insights.questionsThisWeek} this week</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-green-600" />
-                  <span className="text-sm font-medium capitalize">{insights.mostCommonTopic}</span>
+                  <span className="text-xs sm:text-sm font-medium capitalize">{insights.mostCommonTopic}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-purple-600" />
-                  <span className="text-sm font-medium">{insights.hoursSaved.toFixed(1)} hrs saved</span>
+                  <span className="text-xs sm:text-sm font-medium">{insights.hoursSaved.toFixed(1)} hrs saved</span>
                 </div>
               </CardContent>
             </Card>
@@ -747,7 +747,7 @@ export default function ChatbotPage() {
             variant="outline" 
             size="sm" 
             onClick={() => setShowInsights(true)}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 w-full sm:w-auto"
           >
             <Lightbulb className="h-4 w-4" />
             Insights
@@ -755,7 +755,7 @@ export default function ChatbotPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <ChatInterface 
             selectedChat={selectedChat} 
@@ -777,18 +777,18 @@ export default function ChatbotPage() {
           {/* Sentinel element for IntersectionObserver */}
           <div ref={sentinelRef} className="h-0" />
           
-          {/* Export Options Card with sticky behavior */}
+          {/* Export Options Card with sticky behavior (disabled on mobile) */}
           {selectedChat && (
             <>
               {/* Placeholder to prevent layout jump */}
-              {isSticky && <div style={{ height: `${stickyHeight}px` }} />}
+              {isSticky && <div className="hidden lg:block" style={{ height: `${stickyHeight}px` }} />}
               
               <div 
                 ref={exportShareRef}
-                className={`transition-all duration-300 ${
+                className={`transition-all duration-300 mt-4 lg:mt-0 ${
                   isSticky 
-                    ? 'fixed top-4 z-10 w-[calc(33.333%-1.5rem)] shadow-lg' 
-                    : 'mt-4'
+                    ? 'lg:fixed lg:top-4 lg:z-10 lg:w-[calc(33.333%-1.5rem)] lg:shadow-lg' 
+                    : 'lg:mt-4'
                 }`}
               >
                 <Card className="transition-shadow duration-300">

@@ -375,19 +375,19 @@ export default function ProfilePage() {
         </DialogContent>
       </Dialog>
       
-      <div className="container mx-auto py-6 space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="container mx-auto py-4 sm:py-6 px-4 sm:px-6 space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Profile</h1>
-            <p className="text-muted-foreground">Manage your personal information and preferences</p>
+            <h1 className="text-2xl sm:text-3xl font-bold">Profile</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">Manage your personal information and preferences</p>
           </div>
-          <div className="flex space-x-2">
+          <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={refreshData}
               disabled={isRefreshing}
-              className="md:hidden"
+              className="md:hidden flex-1 sm:flex-initial"
             >
               {isRefreshing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -398,6 +398,8 @@ export default function ProfilePage() {
             <Button
               variant={isEditing ? "outline" : "default"}
               onClick={() => setIsEditing(!isEditing)}
+              className="flex-1 sm:flex-initial"
+              size="sm"
             >
               <Edit3 className="h-4 w-4 mr-2" />
               {isEditing ? "Cancel" : "Edit Profile"}
@@ -405,7 +407,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
           {/* Profile Overview */}
           <div className="lg:col-span-1">
             <Card>

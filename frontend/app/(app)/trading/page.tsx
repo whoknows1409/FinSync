@@ -460,7 +460,7 @@ export default function TradingPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto py-4 sm:py-6 space-y-4 sm:space-y-6 px-4 sm:px-6">
       <TradingAccountSummary
         walletBalance={accountData?.walletBalance || 0}
         holdingsValue={holdings.reduce((sum, h) => sum + h.marketValue, 0)}
@@ -473,15 +473,15 @@ export default function TradingPage() {
         isLoading={isLoading}
       />
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
-          <TabsTrigger value="trade">Trade</TabsTrigger>
-          <TabsTrigger value="orders">Orders</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto sm:h-10">
+          <TabsTrigger value="portfolio" className="text-xs sm:text-sm py-2">Portfolio</TabsTrigger>
+          <TabsTrigger value="trade" className="text-xs sm:text-sm py-2">Trade</TabsTrigger>
+          <TabsTrigger value="orders" className="text-xs sm:text-sm py-2">Orders</TabsTrigger>
+          <TabsTrigger value="analytics" className="text-xs sm:text-sm py-2">Analytics</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="portfolio" className="space-y-6">
+        <TabsContent value="portfolio" className="space-y-4 sm:space-y-6">
           <TradingPortfolio 
             holdings={holdings} 
             isLoading={isLoading}
@@ -490,7 +490,7 @@ export default function TradingPage() {
           />
         </TabsContent>
 
-        <TabsContent value="trade" className="space-y-6">
+        <TabsContent value="trade" className="space-y-4 sm:space-y-6">
           <TradingOrderForm 
             walletBalance={accountData?.walletBalance || 0}
             holdings={holdings} // Pass holdings to the form
@@ -498,7 +498,7 @@ export default function TradingPage() {
           />
         </TabsContent>
 
-        <TabsContent value="orders" className="space-y-6">
+        <TabsContent value="orders" className="space-y-4 sm:space-y-6">
           <TradingOrderHistory 
             orders={orders}
             onOrderCancelled={handleOrderCancelled}
@@ -506,7 +506,7 @@ export default function TradingPage() {
           />
         </TabsContent>
 
-        <TabsContent value="analytics" className="space-y-6">
+        <TabsContent value="analytics" className="space-y-4 sm:space-y-6">
           <TradingAnalytics 
             tradingStats={tradingStats}
             orders={orders}
