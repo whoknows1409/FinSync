@@ -1,19 +1,18 @@
-const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 const logger = require('./logger');
 const { getVerificationEmailHtml, getVerificationEmailText } = require('./emailTemplates');
 
 class EmailService {
   constructor() {
-    this.transporter = null;
-    this.initializeTransporter();
+    this.isConfigured = false;
+    this.initializeSendGrid();
   }
 
-  initializeTransporter() {
-    // Only use SendGrid for email service
+  initializeSendGrid() {
+    // Only use SendGrid HTTP API (works on Render, no SMTP port blocking)
     if (!process.env.SENDGRID_API_KEY) {
       logger.error('❌ SendGrid API key not configured. SENDGRID_API_KEY environment variable is required.');
       logger.error('⚠️ Email service will not be available until SENDGRID_API_KEY is configured.');
-      // Don't throw - let server start but email will fail gracefully
       return;
     }
 
@@ -22,27 +21,19 @@ class EmailService {
     }
 
     try {
-      this.transporter = nodemailer.createTransport({
-        host: 'smtp.sendgrid.net',
-        port: 587,
-        secure: false, // use TLS
-        auth: {
-          user: 'apikey', // This is always 'apikey' for SendGrid
-          pass: process.env.SENDGRID_API_KEY,
-        },
-      });
-      logger.info('✅ Email service initialized with SendGrid');
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      this.isConfigured = true;
+      logger.info('✅ Email service initialized with SendGrid HTTP API');
       logger.info(`📧 Using sender address: ${process.env.EMAIL_FROM || 'noreply@finsync.com'}`);
     } catch (error) {
       logger.error('❌ Failed to initialize SendGrid:', error);
       logger.error('⚠️ Email service will not be available. Please check your configuration.');
-      // Don't throw - let server start but email will fail gracefully
-      this.transporter = null;
+      this.isConfigured = false;
     }
   }
 
   async sendVerificationEmail(email, verificationToken, userName) {
-    if (!this.transporter) {
+    if (!this.isConfigured) {
       const error = new Error('Email service not configured. Please set up SendGrid API key.');
       logger.error('❌ Email service not configured');
       throw error;
@@ -55,60 +46,60 @@ class EmailService {
     logger.info(`📧 From: ${fromEmail}`);
     logger.info(`📧 Verification URL: ${verificationUrl}`);
 
-    const mailOptions = {
-      from: {
-        name: 'FinSync',
-        address: fromEmail,
-      },
+    const msg = {
       to: email,
+      from: {
+        email: fromEmail,
+        name: 'FinSync',
+      },
       subject: 'Verify Your FinSync Account',
       html: getVerificationEmailHtml(userName, verificationUrl),
       text: getVerificationEmailText(userName, verificationUrl),
     };
 
     try {
-      logger.info(`✉️ Sending verification email to: ${email}`);
+      logger.info(`✉️ Sending verification email to: ${email} via SendGrid HTTP API`);
       logger.info(`📧 Mail options:`, JSON.stringify({
-        from: mailOptions.from,
-        to: mailOptions.to,
-        subject: mailOptions.subject,
-        hasHtml: !!mailOptions.html,
-        hasText: !!mailOptions.text
+        from: msg.from,
+        to: msg.to,
+        subject: msg.subject,
+        hasHtml: !!msg.html,
+        hasText: !!msg.text
       }));
       
-      const info = await this.transporter.sendMail(mailOptions);
-      logger.info(`✅ Verification email sent successfully to: ${email}`, { messageId: info.messageId });
-      return { success: true, messageId: info.messageId };
+      const response = await sgMail.send(msg);
+      logger.info(`✅ Verification email sent successfully to: ${email}`, { 
+        statusCode: response[0].statusCode,
+        headers: response[0].headers
+      });
+      return { success: true, statusCode: response[0].statusCode };
     } catch (error) {
       logger.error(`❌ Failed to send verification email to: ${email}`);
       logger.error('❌ Error type:', error.constructor.name);
       logger.error('❌ Error message:', error.message);
-      logger.error('❌ Error stack:', error.stack);
-      logger.error('SendGrid error details:', {
-        message: error.message,
-        code: error.code,
-        response: error.response,
-        responseCode: error.responseCode,
-        command: error.command,
-        errno: error.errno,
-        syscall: error.syscall
-      });
+      
+      if (error.response) {
+        logger.error('SendGrid API error details:', {
+          statusCode: error.response.statusCode,
+          body: error.response.body,
+          headers: error.response.headers
+        });
+      }
       
       // Create detailed error message
       let errorMessage = 'Failed to send verification email';
       
-      if (error.responseCode === 550) {
-        errorMessage = 'Invalid recipient email address';
-      } else if (error.message && error.message.includes('Sender Identity')) {
-        errorMessage = 'Email sender not verified in SendGrid. Please contact support.';
-      } else if (error.code === 'EAUTH') {
+      if (error.code === 403) {
+        errorMessage = 'Email sender not verified in SendGrid. Please verify your sender identity.';
+      } else if (error.code === 401) {
         errorMessage = 'SendGrid authentication failed. Invalid API key.';
-      } else if (error.code === 'ECONNREFUSED') {
-        errorMessage = 'Could not connect to SendGrid SMTP server. Network issue.';
-      } else if (error.response) {
-        errorMessage = `SendGrid Error: ${error.message}`;
+      } else if (error.response && error.response.body) {
+        const body = error.response.body;
+        if (body.errors && body.errors.length > 0) {
+          errorMessage = body.errors[0].message || errorMessage;
+        }
       } else if (error.message) {
-        errorMessage = error.message; // Use the actual error message
+        errorMessage = error.message;
       }
       
       // Throw with detailed message
@@ -119,20 +110,20 @@ class EmailService {
   }
 
   async sendPasswordResetEmail(email, resetToken, userName) {
-    if (!this.transporter) {
+    if (!this.isConfigured) {
       logger.error('❌ Email service not configured');
       throw new Error('Email service not configured. Please contact support.');
     }
 
     const resetUrl = `${process.env.FRONTEND_URL}/auth/reset-password?token=${resetToken}`;
-    const fromEmail = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@finsync.com';
+    const fromEmail = process.env.EMAIL_FROM || 'noreply@finsync.com';
 
-    const mailOptions = {
-      from: {
-        name: 'FinSync',
-        address: fromEmail,
-      },
+    const msg = {
       to: email,
+      from: {
+        email: fromEmail,
+        name: 'FinSync',
+      },
       subject: 'Reset Your FinSync Password',
       html: `
         <!DOCTYPE html>
@@ -244,9 +235,9 @@ class EmailService {
     };
 
     try {
-      const info = await this.transporter.sendMail(mailOptions);
-      logger.info('Password reset email sent:', { email, messageId: info.messageId });
-      return { success: true, messageId: info.messageId };
+      const response = await sgMail.send(msg);
+      logger.info('Password reset email sent:', { email, statusCode: response[0].statusCode });
+      return { success: true, statusCode: response[0].statusCode };
     } catch (error) {
       logger.error('Failed to send password reset email:', error);
       throw new Error('Failed to send password reset email. Please try again.');
@@ -254,19 +245,19 @@ class EmailService {
   }
 
   async sendWelcomeEmail(email, userName) {
-    if (!this.transporter) {
+    if (!this.isConfigured) {
       logger.warn('⚠️ Email service not configured, skipping welcome email');
       return { success: false, message: 'Email service not configured' };
     }
 
-    const fromEmail = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@finsync.com';
+    const fromEmail = process.env.EMAIL_FROM || 'noreply@finsync.com';
 
-    const mailOptions = {
-      from: {
-        name: 'FinSync',
-        address: fromEmail,
-      },
+    const msg = {
       to: email,
+      from: {
+        email: fromEmail,
+        name: 'FinSync',
+      },
       subject: '🎉 Welcome to FinSync!',
       html: `
         <!DOCTYPE html>
@@ -362,9 +353,9 @@ class EmailService {
     };
 
     try {
-      const info = await this.transporter.sendMail(mailOptions);
-      logger.info('Welcome email sent:', { email, messageId: info.messageId });
-      return { success: true, messageId: info.messageId };
+      const response = await sgMail.send(msg);
+      logger.info('Welcome email sent:', { email, statusCode: response[0].statusCode });
+      return { success: true, statusCode: response[0].statusCode };
     } catch (error) {
       logger.error('Failed to send welcome email:', error);
       return { success: false, message: error.message };

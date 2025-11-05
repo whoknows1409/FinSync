@@ -2,10 +2,10 @@
 
 /**
  * SendGrid Configuration Tester
- * Tests if your SendGrid is properly configured
+ * Tests if your SendGrid HTTP API is properly configured
  */
 
-const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 require('dotenv').config();
 
 console.log('\n🔍 Testing SendGrid Configuration...\n');
@@ -31,58 +31,47 @@ if (!process.env.EMAIL_FROM) {
   process.exit(1);
 }
 
-// Create transporter
-console.log('\n🔧 Creating SendGrid transporter...');
-const transporter = nodemailer.createTransport({
-  host: 'smtp.sendgrid.net',
-  port: 587,
-  secure: false,
-  auth: {
-    user: 'apikey',
-    pass: process.env.SENDGRID_API_KEY,
-  },
-});
+// Initialize SendGrid
+console.log('\n🔧 Initializing SendGrid HTTP API...');
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+console.log('✅ SendGrid HTTP API initialized');
 
-// Test 1: Verify connection
-console.log('\n🧪 Test 1: Verifying SMTP connection...');
-transporter.verify()
-  .then(() => {
-    console.log('✅ SMTP connection successful!');
-    console.log('✅ SendGrid API key is valid');
-    console.log('✅ Can connect to smtp.sendgrid.net:587');
-    
-    // Test 2: Try sending test email
-    console.log('\n🧪 Test 2: Attempting to send test email...');
-    console.log('📧 To:', process.env.EMAIL_FROM);
-    console.log('📧 From:', process.env.EMAIL_FROM);
-    
-    return transporter.sendMail({
-      from: {
-        name: 'FinSync Test',
-        address: process.env.EMAIL_FROM,
-      },
-      to: process.env.EMAIL_FROM, // Send to yourself
-      subject: 'SendGrid Test - FinSync',
-      html: `
-        <h1>🎉 SendGrid is Working!</h1>
-        <p>If you received this email, your SendGrid configuration is correct.</p>
-        <p><strong>Sender:</strong> ${process.env.EMAIL_FROM}</p>
-        <p><strong>API Key:</strong> ***${process.env.SENDGRID_API_KEY.slice(-10)}</p>
-        <p><strong>Time:</strong> ${new Date().toISOString()}</p>
-      `,
-      text: 'SendGrid is working! If you received this email, your configuration is correct.',
-    });
-  })
-  .then((info) => {
+// Test: Try sending test email
+console.log('\n🧪 Test: Attempting to send test email...');
+console.log('📧 To:', process.env.EMAIL_FROM);
+console.log('📧 From:', process.env.EMAIL_FROM);
+
+const msg = {
+  to: process.env.EMAIL_FROM, // Send to yourself
+  from: {
+    email: process.env.EMAIL_FROM,
+    name: 'FinSync Test',
+  },
+  subject: 'SendGrid Test - FinSync',
+  html: `
+    <h1>🎉 SendGrid is Working!</h1>
+    <p>If you received this email, your SendGrid HTTP API configuration is correct.</p>
+    <p><strong>Sender:</strong> ${process.env.EMAIL_FROM}</p>
+    <p><strong>API Key:</strong> ***${process.env.SENDGRID_API_KEY.slice(-10)}</p>
+    <p><strong>Time:</strong> ${new Date().toISOString()}</p>
+    <p><strong>Method:</strong> SendGrid HTTP API (no SMTP port blocking)</p>
+  `,
+  text: 'SendGrid is working! If you received this email, your configuration is correct.',
+};
+
+sgMail
+  .send(msg)
+  .then((response) => {
     console.log('✅ Test email sent successfully!');
-    console.log('📬 Message ID:', info.messageId);
-    console.log('📮 Accepted:', info.accepted);
+    console.log('📬 Status Code:', response[0].statusCode);
+    console.log('📮 Response Headers:', JSON.stringify(response[0].headers, null, 2));
     console.log('\n' + '='.repeat(60));
     console.log('✅ ALL TESTS PASSED!');
     console.log('='.repeat(60));
     console.log('\n✉️ Check your email inbox at:', process.env.EMAIL_FROM);
     console.log('✉️ Also check spam folder if not in inbox');
-    console.log('\n✅ SendGrid is properly configured and working!');
+    console.log('\n✅ SendGrid HTTP API is properly configured and working!');
+    console.log('✅ No SMTP port blocking issues - works on Render!');
     console.log('✅ You can now deploy to Render\n');
   })
   .catch((error) => {
@@ -90,7 +79,7 @@ transporter.verify()
     console.log('='.repeat(60));
     console.error('Error:', error.message);
     
-    if (error.code === 'EAUTH') {
+    if (error.code === 401 || error.response?.statusCode === 401) {
       console.log('\n🔴 AUTHENTICATION FAILED');
       console.log('This means your SendGrid API key is invalid or expired.');
       console.log('\n📝 How to fix:');
@@ -98,7 +87,7 @@ transporter.verify()
       console.log('2. Create a new API key with "Full Access"');
       console.log('3. Copy the key (starts with SG.)');
       console.log('4. Update SENDGRID_API_KEY in your .env file');
-    } else if (error.message.includes('Sender Identity') || error.responseCode === 403) {
+    } else if (error.code === 403 || error.response?.statusCode === 403) {
       console.log('\n🔴 SENDER NOT VERIFIED');
       console.log('Your sender email is not verified in SendGrid.');
       console.log('\n📝 How to fix:');
@@ -111,7 +100,12 @@ transporter.verify()
       console.log('7. Run this test again');
     } else {
       console.log('\n🔴 UNKNOWN ERROR');
-      console.log('Full error details:', error);
+      if (error.response) {
+        console.log('Response status:', error.response.statusCode);
+        console.log('Response body:', JSON.stringify(error.response.body, null, 2));
+      } else {
+        console.log('Full error details:', error);
+      }
     }
     
     console.log('\n📚 Need help? Check:');
