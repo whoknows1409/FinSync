@@ -5,12 +5,13 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
 import { useTheme } from "next-themes"
-import { Moon, Sun, Bell, User, Settings as SettingsIcon, LogOut } from "lucide-react"
+import { Moon, Sun, Bell, User, Settings as SettingsIcon, LogOut, Menu } from "lucide-react"
 import { LoginForm } from "@/components/auth/login-form"
 import { SignupForm } from "@/components/auth/signup-form"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useUI } from "@/lib/ui-context"
 
 // Custom Logo Component with simple F letter
 function FinsyncLogo() {
@@ -43,7 +44,7 @@ export function Header() {
   const [showAuth, setShowAuth] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
   const pathname = usePathname()
-  const isDashboard = pathname === "/dashboard"
+  const { toggleMobileMenu } = useUI()
 
   const toggleAuthMode = () => {
     setAuthMode(authMode === "login" ? "signup" : "login")
@@ -62,6 +63,19 @@ export function Header() {
       <header className="fixed top-0 left-0 right-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex h-16 w-full items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3 sm:gap-4">
+            {/* Mobile menu button - only show when user is logged in */}
+            {user && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleMobileMenu}
+                className="md:hidden hover:bg-blue-50 dark:hover:bg-blue-950"
+              >
+                <Menu className="h-5 w-5" />
+                <span className="sr-only">Toggle menu</span>
+              </Button>
+            )}
+            
             <div className="flex items-center space-x-2">
               <FinsyncLogo />
               <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">

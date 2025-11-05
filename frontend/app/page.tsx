@@ -498,8 +498,8 @@ export default function HomePage() {
                 },
                 {
                   icon: <Target className="h-6 w-6" />,
-                  title: "Goal Tracking",
-                  description: "Set financial goals and track your progress with visual milestones."
+                  title: "Budget Management",
+                  description: "Create and manage budgets across categories with real-time tracking and insights."
                 },
                 {
                   icon: <BarChart3 className="h-6 w-6" />,
