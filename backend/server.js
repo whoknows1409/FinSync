@@ -18,9 +18,14 @@ const userRoutes = require('./routes/userRoutes');
 require('./utils/cronJobs');
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/finsync')
-.then(() => console.log('MongoDB connected'))
-.catch(err => console.error('MongoDB connection error:', err));
+const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/finsync';
+console.log('Connecting to MongoDB...');
+mongoose.connect(mongoUri)
+.then(() => console.log('✅ MongoDB connected successfully'))
+.catch(err => {
+  console.error('❌ MongoDB connection error:', err);
+  console.error('MongoDB URI (first 20 chars):', mongoUri.substring(0, 20) + '...');
+});
 
 // Debug log to check route loading
 console.log('Setting up routes...');
