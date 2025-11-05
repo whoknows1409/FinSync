@@ -173,6 +173,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       console.log('📡 Google auth response status:', response.status)
+      
+      // Handle rate limiting (429) separately
+      if (response.status === 429) {
+        const errorText = await response.text()
+        let errorMessage = 'Too many login attempts. Please try again in 15 minutes.'
+        try {
+          const errorData = JSON.parse(errorText)
+          errorMessage = errorData.message || errorMessage
+        } catch (e) {
+          // If response is not JSON, use default message
+          console.warn('Failed to parse 429 response:', errorText)
+        }
+        setError(errorMessage)
+        toast.error(errorMessage)
+        return { success: false, error: errorMessage }
+      }
+      
       const data = await response.json()
       console.log('📦 Google auth response data:', data)
 
