@@ -1,15 +1,6 @@
 const express = require('express');
 const router = express.Router();
 
-// Enable preflight for all routes in this router
-router.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.sendStatus(200);
-});
-
 let yahooFinanceInstance;
 async function getYahooFinance() {
   if (!yahooFinanceInstance) {
