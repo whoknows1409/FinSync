@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null)
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
-      const signupUrl = `${apiUrl}/auth/register`
+      const signupUrl = `${apiUrl}/api/auth/register`
       
       console.log("🚀 Attempting signup with:", { name, email, passwordLength: password.length, passwordStrength: password.length >= 8 ? 4 : 2 })
       console.log("🚀 Sending signup request to", signupUrl)
