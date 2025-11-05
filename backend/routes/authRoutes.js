@@ -8,32 +8,26 @@ const { authLimiter } = require('../middleware/rateLimiter'); // Now safe to use
 // Health check endpoint to verify email service configuration
 router.get('/health/email', async (req, res) => {
   const emailService = require('../utils/emailService');
-  const hasTransporter = !!emailService.transporter;
+  const isConfigured = !!emailService.isConfigured;
   const hasApiKey = !!process.env.SENDGRID_API_KEY;
   const hasEmailFrom = !!process.env.EMAIL_FROM;
   const hasFrontendUrl = !!process.env.FRONTEND_URL;
   
-  let verifyResult = null;
-  if (hasTransporter) {
-    try {
-      // Try to verify SMTP connection
-      await emailService.transporter.verify();
-      verifyResult = 'Connection successful';
-    } catch (error) {
-      verifyResult = `Connection failed: ${error.message}`;
-    }
-  }
+  // SendGrid HTTP API doesn't need connection verification
+  // It validates on first send
+  const apiStatus = isConfigured && hasApiKey && hasEmailFrom ? 'Ready' : 'Not configured';
   
   res.json({
-    emailServiceInitialized: hasTransporter,
+    emailServiceInitialized: isConfigured,
     sendgridConfigured: hasApiKey,
     emailFromConfigured: hasEmailFrom,
     frontendUrlConfigured: hasFrontendUrl,
-    smtpConnectionTest: verifyResult,
+    apiStatus: apiStatus,
     apiKeyPreview: hasApiKey ? '***' + process.env.SENDGRID_API_KEY.slice(-10) : 'NOT SET',
     emailFrom: process.env.EMAIL_FROM || 'NOT SET',
     frontendUrl: process.env.FRONTEND_URL || 'NOT SET',
-    status: hasTransporter && hasApiKey && hasEmailFrom && verifyResult === 'Connection successful' ? 'OK' : 'MISCONFIGURED'
+    method: 'SendGrid HTTP API (no SMTP)',
+    status: isConfigured && hasApiKey && hasEmailFrom ? 'OK' : 'MISCONFIGURED'
   });
 });
 

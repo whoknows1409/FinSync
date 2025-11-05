@@ -49,7 +49,7 @@ exports.register = async (req, res) => {
     }
 
     // Check if email service is available BEFORE creating user
-    if (!emailService.transporter) {
+    if (!emailService.isConfigured) {
       console.error('❌ Email service not initialized');
       return res.status(503).json({
         success: false,
