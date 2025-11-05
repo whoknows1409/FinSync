@@ -55,6 +55,36 @@ class EmailService {
       subject: 'Verify Your FinSync Account',
       html: getVerificationEmailHtml(userName, verificationUrl),
       text: getVerificationEmailText(userName, verificationUrl),
+      // Anti-spam improvements
+      replyTo: fromEmail,
+      categories: ['email-verification', 'account-setup'],
+      customArgs: {
+        environment: process.env.NODE_ENV || 'production',
+        emailType: 'verification'
+      },
+      trackingSettings: {
+        clickTracking: {
+          enable: true,
+          enableText: false
+        },
+        openTracking: {
+          enable: true
+        },
+        subscriptionTracking: {
+          enable: false
+        }
+      },
+      mailSettings: {
+        bypassListManagement: {
+          enable: false
+        },
+        footer: {
+          enable: false
+        },
+        sandboxMode: {
+          enable: false
+        }
+      }
     };
 
     try {
