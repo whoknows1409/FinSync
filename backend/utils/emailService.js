@@ -12,7 +12,8 @@ class EmailService {
     // Only use SendGrid for email service
     if (!process.env.SENDGRID_API_KEY) {
       logger.error('❌ SendGrid API key not configured. SENDGRID_API_KEY environment variable is required.');
-      logger.error('Please add SENDGRID_API_KEY to your environment variables.');
+      logger.error('⚠️ Email service will not be available until SENDGRID_API_KEY is configured.');
+      // Don't throw - let server start but email will fail gracefully
       return;
     }
 
@@ -34,7 +35,9 @@ class EmailService {
       logger.info(`📧 Using sender address: ${process.env.EMAIL_FROM || 'noreply@finsync.com'}`);
     } catch (error) {
       logger.error('❌ Failed to initialize SendGrid:', error);
-      throw new Error('Failed to initialize email service. Check your SendGrid configuration.');
+      logger.error('⚠️ Email service will not be available. Please check your configuration.');
+      // Don't throw - let server start but email will fail gracefully
+      this.transporter = null;
     }
   }
 
@@ -64,8 +67,21 @@ class EmailService {
       logger.info(`✅ Verification email sent successfully to: ${email}`, { messageId: info.messageId });
       return { success: true, messageId: info.messageId };
     } catch (error) {
-      logger.error(`❌ Failed to send verification email to: ${email}`, error);
-      throw new Error('Failed to send verification email. Please try again or contact support.');
+      logger.error(`❌ Failed to send verification email to: ${email}`);
+      logger.error('SendGrid error details:', {
+        message: error.message,
+        code: error.code,
+        response: error.response,
+        responseCode: error.responseCode,
+        command: error.command
+      });
+      
+      // Throw the original error with more context
+      const errorMessage = error.response ? 
+        `SendGrid Error: ${error.message} - ${error.response}` : 
+        `Email Error: ${error.message}`;
+      
+      throw new Error(errorMessage);
     }
   }
 

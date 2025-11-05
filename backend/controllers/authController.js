@@ -27,6 +27,8 @@ exports.register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
+    console.log('📝 Registration attempt:', { name, email });
+
     // Validate input
     if (!name || !email || !password) {
       return res.status(400).json({ 
@@ -41,6 +43,16 @@ exports.register = async (req, res) => {
       return res.status(400).json({ 
         success: false,
         message: 'User already exists with this email' 
+      });
+    }
+
+    // Check if email service is available
+    if (!emailService.transporter) {
+      console.error('❌ Email service not initialized');
+      return res.status(503).json({
+        success: false,
+        message: 'Email service is not configured. Please contact the administrator.',
+        error: 'Email service unavailable'
       });
     }
 
@@ -59,6 +71,7 @@ exports.register = async (req, res) => {
       emailVerificationExpires: verificationExpires
     });
 
+    console.log('✅ User created:', user._id);
     console.log('✉️ Attempting to send verification email to:', email);
 
     // Send verification email
@@ -67,7 +80,7 @@ exports.register = async (req, res) => {
       
       console.log('✅ Verification email sent successfully to:', email);
       
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         message: 'Registration successful! Please check your email to verify your account.',
         requiresVerification: true,
@@ -83,24 +96,29 @@ exports.register = async (req, res) => {
       console.error('Email error details:', {
         message: emailError.message,
         code: emailError.code,
-        command: emailError.command
+        command: emailError.command,
+        stack: emailError.stack
       });
       
       // Delete user if email fails
       await User.findByIdAndDelete(user._id);
+      console.log('🗑️ User deleted due to email failure');
       
       return res.status(500).json({ 
         success: false,
-        message: 'Failed to send verification email. Please try again or contact support.',
+        message: 'Failed to send verification email. Please check your email address and try again.',
         error: process.env.NODE_ENV === 'development' ? emailError.message : 'Email service error'
       });
     }
   } catch (error) {
     console.error('❌ Register error:', error);
-    res.status(500).json({ 
+    console.error('Error stack:', error.stack);
+    
+    // Ensure we always return JSON
+    return res.status(500).json({ 
       success: false,
-      message: 'Server error during registration',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Server error during registration. Please try again.',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 };

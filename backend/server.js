@@ -61,10 +61,28 @@ console.log('User routes registered at /api/v1/users');
 
 // Static files are already served from app.js
 
-// Error handling middleware (should be after all routes)
+// 404 handler - must be before error handler
+app.use((req, res, next) => {
+  res.status(404).json({ 
+    success: false, 
+    message: `Route ${req.method} ${req.originalUrl} not found` 
+  });
+});
+
+// Global error handling middleware (should be last)
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ success: false, message: 'Something went wrong!' });
+  console.error('❌ Global error handler caught:', err);
+  console.error('Error stack:', err.stack);
+  
+  // Ensure we always send JSON response
+  res.status(err.status || 500).json({ 
+    success: false,
+    message: err.message || 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? {
+      message: err.message,
+      stack: err.stack
+    } : undefined
+  });
 });
 
 const PORT = process.env.PORT || 5000;
