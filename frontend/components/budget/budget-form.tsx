@@ -21,6 +21,7 @@ export function BudgetForm() {
   const [period, setPeriod] = useState<string>('monthly')
   const [carryForward, setCarryForward] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
+  // Use the same expense categories as transaction form
   const [categories, setCategories] = useState<string[]>([
     "Food & Dining",
     "Transportation",
@@ -28,22 +29,21 @@ export function BudgetForm() {
     "Entertainment",
     "Healthcare",
     "Shopping",
-    "Education",
-    "Travel",
-    "Other",
+    "Housing",
+    "Other Expense"
   ])
   
   // Dynamically get unique categories from transactions
   useEffect(() => {
     if (transactions && transactions.length > 0) {
-      // Get all unique categories from transactions
+      // Get all unique expense categories from transactions
       const uniqueCategories = [...new Set(
         transactions
           .filter(t => t.type === 'expense' && t.category)
           .map(t => t.category)
       )]
       
-      // Predefined categories without "Food"
+      // Predefined expense categories matching transaction form
       const predefinedCategories = [
         "Food & Dining",
         "Transportation",
@@ -51,14 +51,13 @@ export function BudgetForm() {
         "Entertainment",
         "Healthcare",
         "Shopping",
-        "Education",
-        "Travel",
-        "Other",
+        "Housing",
+        "Other Expense"
       ];
       
-      // Combine with transaction categories but remove "Food" and ensure "Food & Dining" is included
+      // Combine with transaction categories and remove duplicates
       const combinedCategories = [...new Set([...uniqueCategories, ...predefinedCategories])]
-        .filter(cat => cat !== "Food") // Remove "Food"
+        .filter(cat => cat !== "Food") // Remove "Food" if it exists
         .sort(); // Sort alphabetically
       
       setCategories(combinedCategories)
