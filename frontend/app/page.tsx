@@ -31,6 +31,7 @@ import { LoginForm } from "@/components/auth/login-form"
 import { SignupForm } from "@/components/auth/signup-form"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { motion } from "framer-motion"
+import Image from "next/image"
 
 const fadeInUp = {
   initial: { opacity: 0, y: 20 },
@@ -87,8 +88,15 @@ export default function HomePage() {
       <header className="relative z-50 border-b border-border/40 backdrop-blur-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Sparkles className="h-5 w-5" />
+            <div className="flex h-10 w-10 items-center justify-center">
+              <Image
+                src="/finsync-logo.svg"
+                alt="FinSync Logo"
+                width={40}
+                height={40}
+                className="object-contain"
+                priority
+              />
             </div>
             <span className="text-xl font-bold">FinSync</span>
           </div>

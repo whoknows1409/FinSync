@@ -12,28 +12,20 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useUI } from "@/lib/ui-context"
+import Image from "next/image"
 
-// Custom Logo Component with simple F letter
+// Custom Logo Component using the new logo image
 function FinsyncLogo() {
   return (
-    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg">
-      {/* Simple, clean F letter */}
-      <div className="flex items-center justify-center">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Clean F letter */}
-          <text
-            x="12"
-            y="20"
-            textAnchor="middle"
-            fontSize="18"
-            fontWeight="bold"
-            fill="white"
-            fontFamily="Arial, sans-serif"
-          >
-            F
-          </text>
-        </svg>
-      </div>
+    <div className="h-10 w-10 flex items-center justify-center">
+      <Image
+        src="/finsync-logo.svg"
+        alt="FinSync Logo"
+        width={40}
+        height={40}
+        className="object-contain"
+        priority
+      />
     </div>
   )
 }

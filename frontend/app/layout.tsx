@@ -18,7 +18,14 @@ const inter = Inter({ subsets: ["latin"], preload: false })
 export const metadata: Metadata = {
   title: "Finsync - Unified Finance Platform",
   description: "Track finances, analyze stocks, and simulate trading all in one place",
-  generator: 'v0.app'
+  generator: 'v0.app',
+  icons: {
+    icon: [
+      { url: '/finsync-logo.svg', type: 'image/svg+xml' },
+      { url: '/favicon.svg', type: 'image/svg+xml' }
+    ],
+    apple: '/finsync-logo.svg',
+  }
 }
 
 export default function RootLayout({
