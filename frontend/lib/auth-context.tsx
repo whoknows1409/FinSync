@@ -183,8 +183,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true)
     setError(null)
     try {
-      console.log('🔐 Sending Google credential to backend for verification...')
-      
       const response = await fetch('/api/auth/google', {
         method: 'POST',
         headers: {
@@ -193,8 +191,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
         body: JSON.stringify({ credential }),
       })
-
-      console.log('📡 Google auth response status:', response.status)
       
       // Handle rate limiting (429) separately
       if (response.status === 429) {
@@ -205,7 +201,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           errorMessage = errorData.message || errorMessage
         } catch (e) {
           // If response is not JSON, use default message
-          console.warn('Failed to parse 429 response:', errorText)
         }
         setError(errorMessage)
         toast.error(errorMessage)
@@ -213,7 +208,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       
       const data = await response.json()
-      console.log('📦 Google auth response data:', data)
 
       if (!response.ok) {
         const errorMessage = data.message || 'Google authentication failed'

@@ -228,8 +228,6 @@ exports.googleAuth = async (req, res) => {
       });
     }
 
-    console.log('🔐 Verifying Google token...');
-
     let payload;
     let isBase64Encoded = false;
 
@@ -238,7 +236,6 @@ exports.googleAuth = async (req, res) => {
       const decoded = Buffer.from(credential, 'base64').toString('utf-8');
       payload = JSON.parse(decoded);
       isBase64Encoded = true;
-      console.log('✅ Parsed as base64-encoded user info');
     } catch (parseError) {
       // If that fails, try verifying as JWT token (from One Tap flow)
       try {
@@ -247,9 +244,8 @@ exports.googleAuth = async (req, res) => {
           audience: process.env.GOOGLE_CLIENT_ID,
         });
         payload = ticket.getPayload();
-        console.log('✅ Verified as JWT token');
       } catch (jwtError) {
-        console.error('❌ Failed to verify Google credential:', jwtError);
+        console.error('❌ Failed to verify Google credential:', jwtError.message);
         return res.status(401).json({ 
           success: false,
           message: 'Invalid Google credential' 
@@ -279,8 +275,6 @@ exports.googleAuth = async (req, res) => {
       });
     }
 
-    console.log('✅ Google authentication data received for:', email);
-
     // For base64-encoded data from OAuth2, we trust the email is verified
     // For JWT, check the email_verified flag
     const isEmailVerified = isBase64Encoded ? true : email_verified;
@@ -296,7 +290,6 @@ exports.googleAuth = async (req, res) => {
     let user = await User.findOne({ email });
 
     if (user) {
-      console.log('👤 User exists, updating Google info...');
       // User exists - update Google info if needed
       if (!user.googleId && googleId) {
         user.googleId = googleId;
@@ -313,7 +306,6 @@ exports.googleAuth = async (req, res) => {
       user.lastLogin = Date.now();
       await user.save();
     } else {
-      console.log('👤 Creating new user with Google account...');
       // Create new user with Google
       user = await User.create({
         name: name || email.split('@')[0],
@@ -331,8 +323,6 @@ exports.googleAuth = async (req, res) => {
     const token = generateToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
 
-    console.log('✅ Google authentication successful');
-
     // Send tokens in response
     res.status(200).json({
       success: true,
@@ -347,7 +337,7 @@ exports.googleAuth = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ Google Auth Error:', error);
+    console.error('❌ Google Auth Error:', error.message);
     
     if (error.message?.includes('Token used too early')) {
       return res.status(401).json({ 

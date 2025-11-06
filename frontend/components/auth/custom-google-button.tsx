@@ -29,11 +29,9 @@ export function CustomGoogleButton({ onGoogleSignIn, text }: CustomGoogleButtonP
     script.async = true
     script.defer = true
     script.onload = () => {
-      console.log('Google script loaded successfully')
       setScriptLoaded(true)
     }
     script.onerror = () => {
-      console.error('Failed to load Google script')
       setError('Failed to load Google authentication script')
     }
     document.head.appendChild(script)
@@ -48,7 +46,6 @@ export function CustomGoogleButton({ onGoogleSignIn, text }: CustomGoogleButtonP
 
   const handleGoogleSignIn = async () => {
     if (!scriptLoaded) {
-      console.error('Google script not loaded yet')
       setError('Google authentication is not ready yet. Please try again in a moment.')
       return
     }
@@ -59,113 +56,110 @@ export function CustomGoogleButton({ onGoogleSignIn, text }: CustomGoogleButtonP
       setFedcmDisabled(false)
       
       const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
-      const currentOrigin = window.location.origin
-      
-      console.log('Initializing Google Sign-In with:', { clientId, currentOrigin })
       
       if (!clientId) {
-        console.error('Google Client ID is missing')
         setError('Google authentication is not properly configured')
         setLoading(false)
         return
       }
 
-      // Initialize Google Sign-In with both FedCM and popup fallback
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: (response: any) => {
-          console.log('Google Sign-In response:', response)
-          if (response.credential) {
-            onGoogleSignIn(response.credential)
-          } else {
-            console.error('No credential in response')
-            setError('Authentication failed: No credential received')
-          }
-          setLoading(false)
-        },
-        auto_select: false,
-        cancel_on_tap_outside: false,
-        // Enable FedCM for browsers that support it
-        use_fedcm_for_prompt: true,
-        // Important: Set the origin and login_uri for proper CORS
-        ux_mode: 'popup',
-        context: 'signin'
-      } as any)
-
-      // Try to prompt the user to sign in
-      window.google.accounts.id.prompt((notification: any) => {
-        console.log('Google Sign-In prompt notification:', notification)
+      // Skip One-Tap entirely and go straight to OAuth2 popup
+      // This avoids FedCM warnings and COOP errors
+      try {
+        const googleAccounts = window.google.accounts as any;
+        if (!googleAccounts.oauth2) {
+          throw new Error('OAuth2 not available');
+        }
         
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          console.log('One-Tap was not displayed, falling back to popup method')
-          // Fall back to popup-based OAuth flow
-          try {
-            // Use type assertion since oauth2 might not be in all type definitions
-            const googleAccounts = window.google.accounts as any;
-            if (!googleAccounts.oauth2) {
-              throw new Error('OAuth2 not available');
+        // Suppress console errors from Google's library
+        const originalError = console.error;
+        const suppressedPatterns = [
+          'Cross-Origin-Opener-Policy',
+          'FedCM',
+          'GSI_LOGGER'
+        ];
+        
+        console.error = (...args: any[]) => {
+          const message = args.join(' ');
+          if (!suppressedPatterns.some(pattern => message.includes(pattern))) {
+            originalError.apply(console, args);
+          }
+        };
+        
+        const client = googleAccounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'email profile openid',
+          callback: async (tokenResponse: any) => {
+            // Restore console.error
+            console.error = originalError;
+            
+            if (tokenResponse.error) {
+              setError('Google Sign-In was cancelled or failed. Please try again.')
+              setLoading(false)
+              return
             }
             
-            const client = googleAccounts.oauth2.initTokenClient({
-              client_id: clientId,
-              scope: 'email profile openid',
-              callback: (tokenResponse: any) => {
-                console.log('OAuth token response:', tokenResponse)
-                if (tokenResponse.access_token) {
-                  // Exchange token for user info
-                  fetch(`https://www.googleapis.com/oauth2/v3/userinfo`, {
-                    headers: {
-                      Authorization: `Bearer ${tokenResponse.access_token}`
-                    }
-                  })
-                  .then(res => res.json())
-                  .then(userInfo => {
-                    console.log('User info:', userInfo)
-                    // Create a credential-like object for backward compatibility
-                    const mockCredential = btoa(JSON.stringify({
-                      email: userInfo.email,
-                      name: userInfo.name,
-                      picture: userInfo.picture,
-                      sub: userInfo.sub
-                    }))
-                    onGoogleSignIn(mockCredential)
-                    setLoading(false)
-                  })
-                  .catch(err => {
-                    console.error('Failed to fetch user info:', err)
-                    setError('Failed to retrieve user information')
-                    setLoading(false)
-                  })
-                } else {
-                  console.error('No access token received')
-                  setError('Authentication failed: No token received')
-                  setLoading(false)
+            if (tokenResponse.access_token) {
+              try {
+                // Exchange token for user info
+                const userInfoResponse = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo`, {
+                  headers: {
+                    Authorization: `Bearer ${tokenResponse.access_token}`
+                  }
+                })
+                
+                if (!userInfoResponse.ok) {
+                  throw new Error('Failed to fetch user info')
                 }
-              },
-              error_callback: (error: any) => {
-                console.error('OAuth error:', error)
-                setError('Google Sign-In was cancelled or failed. Please try again.')
+                
+                const userInfo = await userInfoResponse.json()
+                
+                // Create a credential-like object for backward compatibility
+                const mockCredential = btoa(JSON.stringify({
+                  email: userInfo.email,
+                  name: userInfo.name,
+                  picture: userInfo.picture,
+                  sub: userInfo.sub
+                }))
+                
+                onGoogleSignIn(mockCredential)
+                setLoading(false)
+              } catch (err) {
+                console.error = originalError;
+                setError('Failed to retrieve user information')
                 setLoading(false)
               }
-            })
+            } else {
+              setError('Authentication failed: No token received')
+              setLoading(false)
+            }
+          },
+          error_callback: (error: any) => {
+            // Restore console.error
+            console.error = originalError;
             
-            // Request access token
-            client.requestAccessToken()
-          } catch (fallbackError) {
-            console.error('Fallback OAuth failed:', fallbackError)
-            setFedcmDisabled(true)
-            setError('Google Sign-In is not available in this browser. Please use email to continue.')
+            // Don't show error if user just closed the popup
+            if (error.type !== 'popup_closed') {
+              setError('Google Sign-In failed. Please try again.')
+            }
             setLoading(false)
           }
-        }
+        })
         
-        if (notification.isDismissedMoment()) {
-          console.log('Google Sign-In was dismissed by the user')
-          setLoading(false)
-        }
-      })
+        // Request access token - this opens the popup
+        client.requestAccessToken({ prompt: 'consent' })
+        
+        // Restore console.error after a delay (in case of async errors)
+        setTimeout(() => {
+          console.error = originalError;
+        }, 2000)
+        
+      } catch (fallbackError) {
+        setFedcmDisabled(true)
+        setError('Google Sign-In is not available in this browser. Please use email to continue.')
+        setLoading(false)
+      }
     } catch (error) {
-      console.error('Error during Google Sign-In:', error)
       setError('An error occurred during Google Sign-In. Please try again.')
       setLoading(false)
     }
