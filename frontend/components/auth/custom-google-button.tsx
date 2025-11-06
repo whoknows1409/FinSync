@@ -56,6 +56,7 @@ export function CustomGoogleButton({ onGoogleSignIn, text }: CustomGoogleButtonP
     try {
       setLoading(true)
       setError(null)
+      setFedcmDisabled(false)
       
       const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
       const currentOrigin = window.location.origin
@@ -69,7 +70,7 @@ export function CustomGoogleButton({ onGoogleSignIn, text }: CustomGoogleButtonP
         return
       }
 
-      // Initialize Google Sign-In with FedCM support
+      // Initialize Google Sign-In with both FedCM and popup fallback
       window.google.accounts.id.initialize({
         client_id: clientId,
         callback: (response: any) => {
@@ -84,8 +85,11 @@ export function CustomGoogleButton({ onGoogleSignIn, text }: CustomGoogleButtonP
         },
         auto_select: false,
         cancel_on_tap_outside: false,
-        // Enable FedCM support
-        use_fedcm_for_prompt: true
+        // Enable FedCM for browsers that support it
+        use_fedcm_for_prompt: true,
+        // Important: Set the origin and login_uri for proper CORS
+        ux_mode: 'popup',
+        context: 'signin'
       } as any)
 
       // Try to prompt the user to sign in
@@ -93,10 +97,66 @@ export function CustomGoogleButton({ onGoogleSignIn, text }: CustomGoogleButtonP
         console.log('Google Sign-In prompt notification:', notification)
         
         if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          console.log('Google Sign-In was not displayed or was skipped')
-          setFedcmDisabled(true)
-          setError('Google Sign-In was not available. Try again or use email to continue.')
-          setLoading(false)
+          console.log('One-Tap was not displayed, falling back to popup method')
+          // Fall back to popup-based OAuth flow
+          try {
+            // Use type assertion since oauth2 might not be in all type definitions
+            const googleAccounts = window.google.accounts as any;
+            if (!googleAccounts.oauth2) {
+              throw new Error('OAuth2 not available');
+            }
+            
+            const client = googleAccounts.oauth2.initTokenClient({
+              client_id: clientId,
+              scope: 'email profile openid',
+              callback: (tokenResponse: any) => {
+                console.log('OAuth token response:', tokenResponse)
+                if (tokenResponse.access_token) {
+                  // Exchange token for user info
+                  fetch(`https://www.googleapis.com/oauth2/v3/userinfo`, {
+                    headers: {
+                      Authorization: `Bearer ${tokenResponse.access_token}`
+                    }
+                  })
+                  .then(res => res.json())
+                  .then(userInfo => {
+                    console.log('User info:', userInfo)
+                    // Create a credential-like object for backward compatibility
+                    const mockCredential = btoa(JSON.stringify({
+                      email: userInfo.email,
+                      name: userInfo.name,
+                      picture: userInfo.picture,
+                      sub: userInfo.sub
+                    }))
+                    onGoogleSignIn(mockCredential)
+                    setLoading(false)
+                  })
+                  .catch(err => {
+                    console.error('Failed to fetch user info:', err)
+                    setError('Failed to retrieve user information')
+                    setLoading(false)
+                  })
+                } else {
+                  console.error('No access token received')
+                  setError('Authentication failed: No token received')
+                  setLoading(false)
+                }
+              },
+              error_callback: (error: any) => {
+                console.error('OAuth error:', error)
+                setError('Google Sign-In was cancelled or failed. Please try again.')
+                setLoading(false)
+              }
+            })
+            
+            // Request access token
+            client.requestAccessToken()
+          } catch (fallbackError) {
+            console.error('Fallback OAuth failed:', fallbackError)
+            setFedcmDisabled(true)
+            setError('Google Sign-In is not available in this browser. Please use email to continue.')
+            setLoading(false)
+          }
         }
         
         if (notification.isDismissedMoment()) {
@@ -145,7 +205,7 @@ export function CustomGoogleButton({ onGoogleSignIn, text }: CustomGoogleButtonP
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 p-3">
           <div className="flex items-start space-x-2">
-            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
             <p className="text-sm text-red-800">{error}</p>
           </div>
         </div>

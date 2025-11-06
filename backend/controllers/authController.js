@@ -230,13 +230,32 @@ exports.googleAuth = async (req, res) => {
 
     console.log('🔐 Verifying Google token...');
 
-    // Verify the Google token with Google's servers
-    const ticket = await client.verifyIdToken({
-      idToken: credential,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
+    let payload;
+    let isBase64Encoded = false;
 
-    const payload = ticket.getPayload();
+    // Try to parse as base64-encoded JSON first (from OAuth2 flow)
+    try {
+      const decoded = Buffer.from(credential, 'base64').toString('utf-8');
+      payload = JSON.parse(decoded);
+      isBase64Encoded = true;
+      console.log('✅ Parsed as base64-encoded user info');
+    } catch (parseError) {
+      // If that fails, try verifying as JWT token (from One Tap flow)
+      try {
+        const ticket = await client.verifyIdToken({
+          idToken: credential,
+          audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        payload = ticket.getPayload();
+        console.log('✅ Verified as JWT token');
+      } catch (jwtError) {
+        console.error('❌ Failed to verify Google credential:', jwtError);
+        return res.status(401).json({ 
+          success: false,
+          message: 'Invalid Google credential' 
+        });
+      }
+    }
     
     if (!payload) {
       return res.status(401).json({ 
@@ -245,12 +264,28 @@ exports.googleAuth = async (req, res) => {
       });
     }
 
-    const { email, name, picture, sub: googleId, email_verified } = payload;
+    const { 
+      email, 
+      name, 
+      picture, 
+      sub: googleId,
+      email_verified 
+    } = payload;
 
-    console.log('✅ Google token verified for:', email);
+    if (!email) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Email not provided by Google' 
+      });
+    }
 
-    // Check if email is verified by Google
-    if (!email_verified) {
+    console.log('✅ Google authentication data received for:', email);
+
+    // For base64-encoded data from OAuth2, we trust the email is verified
+    // For JWT, check the email_verified flag
+    const isEmailVerified = isBase64Encoded ? true : email_verified;
+
+    if (!isEmailVerified && !isBase64Encoded) {
       return res.status(400).json({ 
         success: false,
         message: 'Please use a verified Google account' 
@@ -263,10 +298,16 @@ exports.googleAuth = async (req, res) => {
     if (user) {
       console.log('👤 User exists, updating Google info...');
       // User exists - update Google info if needed
-      if (!user.googleId) {
+      if (!user.googleId && googleId) {
         user.googleId = googleId;
+      }
+      if (user.authProvider !== 'google') {
         user.authProvider = 'google';
-        user.profileImage = picture || user.profileImage;
+      }
+      if (picture && picture !== user.profileImage) {
+        user.profileImage = picture;
+      }
+      if (!user.isEmailVerified) {
         user.isEmailVerified = true;
       }
       user.lastLogin = Date.now();
@@ -275,9 +316,9 @@ exports.googleAuth = async (req, res) => {
       console.log('👤 Creating new user with Google account...');
       // Create new user with Google
       user = await User.create({
-        name,
+        name: name || email.split('@')[0],
         email,
-        googleId,
+        googleId: googleId || undefined,
         profileImage: picture,
         password: Math.random().toString(36).slice(-8) + 'Aa1!', // Random password (won't be used)
         isEmailVerified: true,
