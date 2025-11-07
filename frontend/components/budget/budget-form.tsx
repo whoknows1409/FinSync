@@ -79,8 +79,6 @@ export function BudgetForm() {
     }
 
     try {
-      console.log("Submitting budget:", { category, amount: amountNumber, period, carryForward });
-      
       // Use category as the name since we're removing the name field
       await setBudget(category, category, amountNumber, period, { rollover: carryForward })
       setCategory('')

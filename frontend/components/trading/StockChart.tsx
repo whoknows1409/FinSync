@@ -191,7 +191,6 @@ export default function StockChart({
   // Effect for creating and updating chart
   useEffect(() => {
     if (!chartContainerRef.current) {
-      console.log('Chart container ref is null');
       return;
     }
 
@@ -206,10 +205,7 @@ export default function StockChart({
     const chartData = isLiveMode ? livePriceData : historicalData;
     const indicators = isLiveMode ? [] : calculateMovingAverages(historicalData);
 
-    console.log('Creating chart with data length:', chartData.length, 'for stock:', stockSymbol);
-
     if (chartData.length === 0) {
-      console.log('No chart data available, skipping chart creation');
       return;
     }
 
@@ -465,8 +461,6 @@ export default function StockChart({
     if (!isLiveMode || !priceSeriesRef.current || livePriceData.length === 0) {
       return;
     }
-
-    console.log('Updating chart with live data, points:', livePriceData.length);
 
     try {
       // Format the live data for the line chart

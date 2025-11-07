@@ -80,9 +80,6 @@ export default function EnhancedStockAnalysis() {
       const stock = await getStockAnalysisData(symbol)
       setStockData(stock)
       
-      // Log the stock data for debugging
-      console.log('Fetched stock analysis data:', stock)
-      
       // Fetch analysis after getting stock data
       fetchAnalysis(stock)
     } catch (err: any) {
@@ -164,8 +161,6 @@ export default function EnhancedStockAnalysis() {
 
     setLoadingSuggestions(true);
     try {
-      console.log('Fetching personal suggestions for stock:', stock.symbol, 'user:', user.id);
-      
       const response = await fetch('/api/stocks-analysis/personal-suggestions', {
         method: 'POST',
         headers: {
@@ -177,8 +172,6 @@ export default function EnhancedStockAnalysis() {
           userId: user.id 
         }),
       });
-      
-      console.log('Response status:', response.status);
       
       if (!response.ok) {
         let errorData;
@@ -195,7 +188,6 @@ export default function EnhancedStockAnalysis() {
       }
       
       const data = await response.json();
-      console.log('Personal suggestions data:', data);
       
       // Ensure the data structure is correct
       if (data && data.data) {

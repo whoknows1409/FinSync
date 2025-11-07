@@ -560,7 +560,6 @@ export const getStockHistoricalData = async (
     let adjustedInterval = interval;
     if (!validIntervals[timeframe].includes(interval)) {
       adjustedInterval = defaultIntervals[timeframe];
-      console.warn(`Interval ${interval} is not valid for timeframe ${timeframe}. Using default interval ${adjustedInterval}`);
     }
     
     // Generate a unique cache buster

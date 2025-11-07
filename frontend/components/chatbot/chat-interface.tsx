@@ -184,11 +184,6 @@ export function ChatInterface({
   const speechSynthesisRef = useRef<SpeechSynthesis | null>(null)
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
 
-  // Debug: Log component mount and props
-  useEffect(() => {
-    console.log('ChatInterface mounted with props:', { selectedChat, onNewChat, onLoadChat, isNewChat })
-  }, [selectedChat, onNewChat, onLoadChat, isNewChat])
-
   useEffect(() => {
     // Check if Gemini API is configured
     const configured = isGeminiConfigured()
@@ -243,7 +238,6 @@ export function ChatInterface({
   useEffect(() => {
     // Load selected chat if provided
     if (selectedChat) {
-      console.log('Loading selected chat:', selectedChat)
       isChatLoaded.current = true
       const loadedMessages: Message[] = selectedChat.messages.map(msg => ({
         id: Math.random().toString(36).substring(2, 9),
@@ -265,7 +259,6 @@ export function ChatInterface({
       lastSavedMessages.current = loadedMessages
     } else if (isNewChat) {
       // Reset to initial state when starting a new chat
-      console.log('Resetting to initial chat state')
       isChatLoaded.current = false
       setMessages([{
         id: "1",
@@ -350,8 +343,6 @@ export function ChatInterface({
       // Save to backend
       chatbotAPI.saveChatHistory(chatData)
         .then(response => {
-          console.log('Chat saved successfully:', response)
-          
           // Update the last saved messages
           lastSavedMessages.current = [...messages]
           

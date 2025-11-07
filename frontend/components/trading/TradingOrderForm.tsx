@@ -586,10 +586,8 @@ export default function TradingOrderForm({
     checkMarketStatus();
 
     try {
-      console.log('handleSearchWithSymbol called with:', symbol);
       setLoading(true);
       const stock = await getStockDetails(symbol, '1d');
-      console.log('Stock details received:', stock);
       setStockSymbol(symbol);
       setStockDetails(stock);
       setRealTimeData(stock);
@@ -812,8 +810,6 @@ export default function TradingOrderForm({
         // For market orders, explicitly set the current price
         orderPayload.price = finalPrice;
       }
-      
-      console.log('Placing order with payload:', orderPayload);
       
       await placeOrder(orderPayload);
 

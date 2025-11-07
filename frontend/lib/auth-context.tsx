@@ -85,9 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ email, password }),
       })
 
-      console.log("📡 Login response status:", response.status)
       const data = await response.json()
-      console.log("📦 Login response data:", data)
 
       if (!response.ok) {
         const errorMessage = data.message || "Invalid credentials. Please try again."
@@ -131,12 +129,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ email, password, name }),
       })
 
-      console.log("📡 Signup response status:", response.status)
-      
       let data
       try {
         data = await response.json()
-        console.log("📦 Signup result:", data)
       } catch (parseError) {
         console.error("❌ Failed to parse response as JSON:", parseError)
         const errorMessage = "Server returned invalid response. Please try again."
@@ -258,9 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify(userData),
       })
 
-      console.log("📡 Update user response status:", response.status)
       const data = await response.json()
-      console.log("📦 Update user response data:", data)
 
       if (!response.ok) {
         throw new Error(data.message || "Failed to update profile. Please try again.")

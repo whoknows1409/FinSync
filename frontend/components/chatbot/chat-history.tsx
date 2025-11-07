@@ -194,7 +194,6 @@ export function ChatHistory({
   }, [propChatHistory])
 
   const handleSelectChat = (chat: ChatHistoryItem) => {
-    console.log('ChatHistory.handleSelectChat called with:', chat)
     // Add the timestamp field to ensure compatibility with the chat interface
     const chatWithTimestamp = {
       ...chat,
@@ -223,7 +222,6 @@ export function ChatHistory({
   }
 
   const handleClearHistory = async () => {
-    console.log('Clearing chat history')
     try {
       await chatbotAPI.clearChatHistory()
       setChatHistory([])
