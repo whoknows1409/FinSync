@@ -74,8 +74,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true)
     setError(null)
     try {
-      console.log("🔐 Sending login request to /api/auth/login")
-      
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -117,9 +115,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
       const signupUrl = `${apiUrl}/api/auth/register`
-      
-      console.log("🚀 Attempting signup with:", { name, email, passwordLength: password.length, passwordStrength: password.length >= 8 ? 4 : 2 })
-      console.log("🚀 Sending signup request to", signupUrl)
       
       const response = await fetch(signupUrl, {
         method: 'POST',
@@ -236,8 +231,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true)
     setError(null)
     try {
-      console.log("🔄 Sending update user request to /api/v1/profile")
-      
       const token = localStorage.getItem("token")
       if (!token) {
         throw new Error("No authentication token found")
