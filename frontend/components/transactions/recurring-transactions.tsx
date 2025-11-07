@@ -257,12 +257,12 @@ export function RecurringTransactions() {
                           {recurring.type}
                         </Badge>
                         {generatedCount > 0 && (
-                          <Badge variant="outline" className="bg-blue-50">
+                          <Badge variant="outline" className="bg-blue-50 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
                             {generatedCount} generated
                           </Badge>
                         )}
                         {!recurring.isActive && (
-                          <Badge variant="outline" className="bg-gray-100 text-gray-800">
+                          <Badge variant="outline" className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300">
                             Inactive
                           </Badge>
                         )}
