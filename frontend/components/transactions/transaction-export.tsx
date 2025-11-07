@@ -64,10 +64,7 @@ export function TransactionExport({ open, onClose }: TransactionExportProps) {
       // Sort transactions by date (newest first)
       filteredTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       
-      console.log("Transaction data calculated")
-      
       if (exportFormat === 'csv') {
-        console.log("Exporting as CSV...")
         let csvContent = "Date,Description,Category,Type,Amount\n"
         filteredTransactions.forEach(transaction => {
           csvContent += `${transaction.date},${transaction.description},${transaction.category},${transaction.type},${transaction.amount}\n`

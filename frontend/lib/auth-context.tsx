@@ -137,7 +137,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (!response.ok) {
         const errorMessage = data.message || "Failed to create account. Please try again."
-        console.log("❌ Signup failed:", errorMessage)
         setError(errorMessage)
         toast.error(errorMessage)
         return { success: false, error: errorMessage }
@@ -145,7 +144,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Check if email verification is required
       if (data.requiresVerification) {
-        console.log("✅ Registration successful, verification required")
         toast.success('Registration successful! Please check your email to verify your account.')
         return { success: true, requiresVerification: true }
       }
@@ -160,7 +158,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('💥 Signup error:', error)
       const errorMessage = "An error occurred during signup. Please try again."
-      console.log("❌ Signup failed:", errorMessage)
       setError(errorMessage)
       toast.error(errorMessage)
       return { success: false, error: errorMessage }

@@ -157,18 +157,14 @@ export function RecurringTransactions() {
     if (deleteId) {
       setIsDeleting(deleteId)
       try {
-        console.log('Confirming delete for recurring transaction:', deleteId);
         const result = await deleteRecurringTransaction(deleteId)
-        console.log('Delete result:', result);
         toast({
           title: "Success",
           description: "Recurring transaction deleted successfully",
         })
         
         // Force a refresh of the data
-        console.log('Refreshing data after deletion...');
         await fetchRecurringTransactions()
-        console.log('Data refreshed');
         
       } catch (error) {
         console.error('Error deleting recurring transaction:', error);

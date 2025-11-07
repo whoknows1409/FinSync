@@ -19,7 +19,6 @@ export function ExportReports() {
       totalExpenses: transactions.filter((t) => t.type === "expense").reduce((sum, t) => sum + t.amount, 0),
     }
 
-    console.log("Exporting PDF report:", reportData)
     alert("PDF report would be generated here. Integration with jsPDF or similar library needed.")
   }
 

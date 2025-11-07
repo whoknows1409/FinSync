@@ -81,9 +81,7 @@ export function ChatHistory({
 
     const fetchChatHistory = async () => {
       try {
-        console.log('Fetching chat history...')
         const response = await chatbotAPI.getChatHistory()
-        console.log('Chat history response:', response)
         if (response.success) {
           // Validate dates in the response
           const validatedHistory = response.data.map((chat: any) => {

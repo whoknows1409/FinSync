@@ -19,8 +19,6 @@ export const useGoogleAuth = (callback: (response: GoogleCredentialResponse) => 
             return;
           }
           
-          console.log('Initializing Google Sign-In with Client ID:', clientId);
-          
           window.google.accounts.id.initialize({
             client_id: clientId,
             callback,

@@ -39,11 +39,8 @@ export function BudgetExport({ open, onClose }: BudgetExportProps) {
     setError("")
     
     try {
-      console.log("Starting export process...")
-      
       // Get budgets for the selected month
       const budgets = getBudgetsForMonth(selectedMonth)
-      console.log("Budgets retrieved:", budgets)
       
       if (!budgets || budgets.length === 0) {
         setError("No budgets found for the selected month.")
@@ -76,13 +73,10 @@ export function BudgetExport({ open, onClose }: BudgetExportProps) {
         }
       })
       
-      console.log("Budget data calculated:", budgetData)
-      
       // Format month name for display
       const monthName = formatDate(new Date(selectedMonth + '-01'), 'MMMM yyyy')
       
       if (exportFormat === 'csv') {
-        console.log("Exporting as CSV...")
         let csvContent = "Category,Total Budget,Total Spent,Remaining,Over Spent\n"
         budgetData.forEach(item => {
           csvContent += `${item.category},${item.totalBudget},${item.totalSpent},${item.remaining},${item.overSpent}\n`
