@@ -190,17 +190,6 @@ export class GeminiAPI {
         throw new Error('No content in Gemini API response')
       }
       
-      // Debug: Log the actual response structure
-      console.log('SendMessage - Gemini API Response Structure:', {
-        hasContent: !!candidate.content,
-        hasParts: !!candidate.content.parts,
-        partsLength: candidate.content.parts?.length,
-        hasDirectText: !!candidate.content.text,
-        contentKeys: Object.keys(candidate.content),
-        fullContent: JSON.stringify(candidate.content, null, 2),
-        fullCandidate: JSON.stringify(candidate, null, 2)
-      })
-      
       // Handle multiple response structures
       if (candidate.content.parts && candidate.content.parts.length > 0) {
         // Structure 1: parts array
@@ -212,9 +201,10 @@ export class GeminiAPI {
         // Structure 3: content is directly a string
         return candidate.content
       } else {
-        // Try to extract text from any nested structure
-        console.error('Unknown Gemini API response structure:', {
+        // Content has no text
+        console.error('Invalid Gemini API response - no text content:', {
           content: candidate.content,
+          finishReason: candidate.finishReason,
           fullResponse: response
         })
         throw new Error('No text content in Gemini API response')
@@ -243,7 +233,7 @@ export class GeminiAPI {
         temperature = 0.7,
         topK = 40,
         topP = 0.95,
-        maxOutputTokens = 256 // Shorter response for titles
+        maxOutputTokens = 1024 // Increased from 256 to 1024 for better title generation
       } = options;
 
       const response = await fetch(`${this.baseUrl}?key=${this.apiKey}`, {
@@ -323,38 +313,48 @@ export class GeminiAPI {
       
       const candidate = data.candidates[0]
       
+      // Check for MAX_TOKENS finish reason (truncated response)
+      if (candidate.finishReason === 'MAX_TOKENS') {
+        console.warn('Gemini API response was truncated due to MAX_TOKENS. Consider increasing maxOutputTokens.')
+        // For truncated responses, the content might be incomplete or empty
+        // We should still try to extract any available text
+      }
+      
       if (!candidate.content) {
         console.error('Invalid Gemini API response - no content:', data)
         throw new Error('Invalid response structure from Gemini API')
       }
       
-      // Debug: Log the actual response structure
-      console.log('Gemini API Response Structure:', {
-        hasContent: !!candidate.content,
-        hasParts: !!candidate.content.parts,
-        partsLength: candidate.content.parts?.length,
-        hasDirectText: !!candidate.content.text,
-        contentKeys: Object.keys(candidate.content),
-        fullContent: JSON.stringify(candidate.content, null, 2),
-        fullCandidate: JSON.stringify(candidate, null, 2)
-      })
-      
       // Handle multiple response structures
       if (candidate.content.parts && candidate.content.parts.length > 0) {
         // Structure 1: parts array
-        return candidate.content.parts[0].text.trim()
+        const text = candidate.content.parts[0].text.trim()
+        if (!text && candidate.finishReason === 'MAX_TOKENS') {
+          throw new Error('Response truncated due to token limit - no text generated')
+        }
+        return text
       } else if (candidate.content.text) {
         // Structure 2: direct text field
-        return candidate.content.text.trim()
+        const text = candidate.content.text.trim()
+        if (!text && candidate.finishReason === 'MAX_TOKENS') {
+          throw new Error('Response truncated due to token limit - no text generated')
+        }
+        return text
       } else if (typeof candidate.content === 'string') {
         // Structure 3: content is directly a string
-        return candidate.content.trim()
+        const text = candidate.content.trim()
+        if (!text && candidate.finishReason === 'MAX_TOKENS') {
+          throw new Error('Response truncated due to token limit - no text generated')
+        }
+        return text
       } else {
-        // Try to extract text from any nested structure
-        const contentStr = JSON.stringify(candidate.content)
-        console.error('Unknown Gemini API response structure:', {
+        // Content has no text - this happens with MAX_TOKENS on Gemini 2.5 Flash
+        if (candidate.finishReason === 'MAX_TOKENS') {
+          throw new Error('Response truncated due to token limit - please increase maxOutputTokens or shorten your prompt')
+        }
+        console.error('Invalid Gemini API response - no text content:', {
           content: candidate.content,
-          contentString: contentStr,
+          finishReason: candidate.finishReason,
           fullData: data
         })
         throw new Error('Empty response from Gemini API')
