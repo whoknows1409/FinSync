@@ -197,15 +197,26 @@ export class GeminiAPI {
         partsLength: candidate.content.parts?.length,
         hasDirectText: !!candidate.content.text,
         contentKeys: Object.keys(candidate.content),
-        fullContent: candidate.content
+        fullContent: JSON.stringify(candidate.content, null, 2),
+        fullCandidate: JSON.stringify(candidate, null, 2)
       })
       
-      // Handle both response structures: parts array or direct text
+      // Handle multiple response structures
       if (candidate.content.parts && candidate.content.parts.length > 0) {
+        // Structure 1: parts array
         return candidate.content.parts[0].text
       } else if (candidate.content.text) {
+        // Structure 2: direct text field
         return candidate.content.text
+      } else if (typeof candidate.content === 'string') {
+        // Structure 3: content is directly a string
+        return candidate.content
       } else {
+        // Try to extract text from any nested structure
+        console.error('Unknown Gemini API response structure:', {
+          content: candidate.content,
+          fullResponse: response
+        })
         throw new Error('No text content in Gemini API response')
       }
     } catch (error) {
@@ -324,16 +335,28 @@ export class GeminiAPI {
         partsLength: candidate.content.parts?.length,
         hasDirectText: !!candidate.content.text,
         contentKeys: Object.keys(candidate.content),
-        fullContent: candidate.content
+        fullContent: JSON.stringify(candidate.content, null, 2),
+        fullCandidate: JSON.stringify(candidate, null, 2)
       })
       
-      // Handle both response structures: parts array or direct text
+      // Handle multiple response structures
       if (candidate.content.parts && candidate.content.parts.length > 0) {
+        // Structure 1: parts array
         return candidate.content.parts[0].text.trim()
       } else if (candidate.content.text) {
+        // Structure 2: direct text field
         return candidate.content.text.trim()
+      } else if (typeof candidate.content === 'string') {
+        // Structure 3: content is directly a string
+        return candidate.content.trim()
       } else {
-        console.error('Invalid Gemini API response - no text content:', data)
+        // Try to extract text from any nested structure
+        const contentStr = JSON.stringify(candidate.content)
+        console.error('Unknown Gemini API response structure:', {
+          content: candidate.content,
+          contentString: contentStr,
+          fullData: data
+        })
         throw new Error('Empty response from Gemini API')
       }
     } catch (error) {
