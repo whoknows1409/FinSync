@@ -87,20 +87,17 @@ export default function ChatbotPage() {
   }, [])
 
   const handleSelectChat = (chat: ChatHistoryItem) => {
-    console.log('ChatbotPage.handleSelectChat called with:', chat)
     setSelectedChat(chat)
     setIsNewChat(false)
   }
 
   const handleNewChat = () => {
-    console.log('ChatbotPage.handleNewChat called')
     setSelectedChat(null)
     setIsNewChat(true)
   }
 
   const handleChatUpdated = () => {
     // Refresh chat history when a chat is updated
-    console.log('Chat updated, refreshing chat history')
     setRefreshTrigger(prev => prev + 1)
   }
 

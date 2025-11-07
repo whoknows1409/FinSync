@@ -39,7 +39,6 @@ export interface StockAnalysisData {
 // Get stock analysis data with all required fields
 export const getStockAnalysisData = async (symbol: string): Promise<StockAnalysisData> => {
   try {
-    console.log('Getting stock analysis data for:', symbol);
     
     // Generate a unique cache buster
     const uniqueCacheBuster = `${Date.now()}-${Math.random()}`;
@@ -60,7 +59,6 @@ export const getStockAnalysisData = async (symbol: string): Promise<StockAnalysi
       }
     });
     
-    console.log('Stock analysis response:', response.data);
     
     // Extract the stock data from the response
     const stockData = response.data;
@@ -79,7 +77,6 @@ export const getStockAnalysisData = async (symbol: string): Promise<StockAnalysi
     
     // If the stock-analysis endpoint fails, try the regular stocks endpoint
     try {
-      console.log('Falling back to regular stocks endpoint for:', symbol);
       
       const fallbackResponse = await axios.get(`${API_BASE_URL}/v1/stocks/${symbol}`, {
         params: { 
@@ -96,7 +93,6 @@ export const getStockAnalysisData = async (symbol: string): Promise<StockAnalysi
         }
       });
       
-      console.log('Fallback stocks response:', fallbackResponse.data);
       
       // Extract the stock object from the response
       const stock = fallbackResponse.data.data.stock;
@@ -149,7 +145,6 @@ export const getStockAnalysisData = async (symbol: string): Promise<StockAnalysi
 // Get stock analysis using AI
 export const getStockAIAnalysis = async (stock: StockAnalysisData) => {
   try {
-    console.log('Getting AI analysis for stock:', stock.symbol);
     
     const response = await fetch('/api/stocks-analysis/stock-analysis', {
       method: 'POST',

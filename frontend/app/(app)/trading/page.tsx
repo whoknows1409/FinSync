@@ -276,51 +276,41 @@ export default function TradingPage() {
 
     // Prevent multiple concurrent requests
     if (isFetchingRef.current) {
-      console.log('Fetch already in progress, skipping...')
       return
     }
     
     // Check if component is still mounted
     if (!isMountedRef.current) {
-      console.log('Component unmounted, skipping fetch...')
       return
     }
     
-    console.log('Starting fetchTradingData...')
     isFetchingRef.current = true
     setIsLoading(true)
     
     try {
       // Fetch account data
-      console.log('Fetching trading account...')
       const tradingAccountResponse = await getTradingAccount()
       if (isMountedRef.current) {
-        console.log('Trading account fetched:', tradingAccountResponse)
         setAccountData(tradingAccountResponse.data?.tradingAccount || tradingAccountResponse.tradingAccount)
       }
 
       // Fetch holdings
-      console.log('Fetching holdings...')
       const holdingsResponse = await getHoldings()
       if (isMountedRef.current) {
-        console.log('Holdings fetched:', holdingsResponse)
         const hr: any = holdingsResponse as any
         const normalizedHoldings = Array.isArray(hr) ? hr : (hr?.data?.holdings ?? hr?.holdings ?? [])
         setHoldings(normalizedHoldings as Holding[])
       }
 
       // Fetch orders
-      console.log('Fetching orders...')
       const ordersResponse = await getOrders()
       if (isMountedRef.current) {
-        console.log('Orders fetched:', ordersResponse)
         const orr: any = ordersResponse as any
         const normalizedOrders = Array.isArray(orr) ? orr : (orr?.data?.orders ?? orr?.orders ?? [])
         setOrders(normalizedOrders as Order[])
       }
 
       // Fetch portfolio allocation
-      console.log('Fetching portfolio allocation...')
       try {
         const allocationResponse = await fetch('/api/v1/trading/portfolio-allocation', {
           headers: {
@@ -330,7 +320,6 @@ export default function TradingPage() {
 
         if (allocationResponse.ok && isMountedRef.current) {
           const allocationData = await allocationResponse.json()
-          console.log('Portfolio allocation fetched:', allocationData)
           setSectorAllocation(allocationData.data?.allocation || allocationData || [])
         } else {
           console.error('Failed to fetch portfolio allocation data')
@@ -342,11 +331,9 @@ export default function TradingPage() {
       }
 
       // Fetch trading stats
-      console.log('Fetching trading stats...')
       try {
         const statsResponse = await getTradingStats()
         if (isMountedRef.current) {
-          console.log('Trading stats fetched:', statsResponse)
           const sr: any = statsResponse as any
           const normalizedStats = sr?.data ?? sr
           setTradingStats(normalizedStats as TradingStats)
@@ -362,7 +349,6 @@ export default function TradingPage() {
       }
     } finally {
       if (isMountedRef.current) {
-        console.log('Fetch completed, setting loading to false')
         setIsLoading(false)
       }
       isFetchingRef.current = false
@@ -397,7 +383,6 @@ export default function TradingPage() {
 
   // Effect for initial data fetch
   useEffect(() => {
-    console.log('Component mounted, setting up...')
     isMountedRef.current = true
     
     // Initial fetch with a small delay to ensure everything is ready
@@ -407,7 +392,6 @@ export default function TradingPage() {
     
     // Cleanup function
     return () => {
-      console.log('Component unmounting, cleaning up...')
       isMountedRef.current = false
       if (fetchTimeoutRef.current) {
         clearTimeout(fetchTimeoutRef.current)
@@ -417,14 +401,12 @@ export default function TradingPage() {
 
   // Debounced handler for order placement
   const handleOrderPlaced = useCallback(() => {
-    console.log('Order placed, scheduling data refresh...')
     if (fetchTimeoutRef.current) {
       clearTimeout(fetchTimeoutRef.current)
     }
     
     fetchTimeoutRef.current = setTimeout(() => {
       if (isMountedRef.current && !isFetchingRef.current) {
-        console.log('Refreshing data after order placement...')
         fetchTradingData()
       }
     }, 1000) // Increased debounce time
@@ -432,14 +414,12 @@ export default function TradingPage() {
 
   // Debounced handler for order cancellation
   const handleOrderCancelled = useCallback(() => {
-    console.log('Order cancelled, scheduling data refresh...')
     if (fetchTimeoutRef.current) {
       clearTimeout(fetchTimeoutRef.current)
     }
     
     fetchTimeoutRef.current = setTimeout(() => {
       if (isMountedRef.current && !isFetchingRef.current) {
-        console.log('Refreshing data after order cancellation...')
         fetchTradingData()
       }
     }, 1000) // Increased debounce time

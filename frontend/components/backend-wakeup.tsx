@@ -51,19 +51,28 @@ export function BackendWakeup() {
           clearTimeout(timeoutId)
 
           if (response.ok) {
-            console.log('✅ Backend is awake and ready')
+            // Only log in development
+            if (process.env.NODE_ENV === 'development') {
+              console.log('✅ Backend is awake and ready')
+            }
             return
           }
           
           throw new Error(`Backend responded with status: ${response.status}`)
         } catch (error) {
           if (attempts < maxAttempts) {
-            console.log(`⏳ Backend is waking up... (attempt ${attempts}/${maxAttempts})`)
+            // Only log in development
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`⏳ Backend is waking up... (attempt ${attempts}/${maxAttempts})`)
+            }
             // Wait before retrying
             await new Promise(resolve => setTimeout(resolve, retryDelay))
             return tryWakeUp()
           } else {
-            console.warn('⚠️ Backend may still be waking up. It will be available shortly.')
+            // Only log warnings in development
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('⚠️ Backend may still be waking up. It will be available shortly.')
+            }
           }
         }
       }

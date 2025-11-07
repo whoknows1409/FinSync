@@ -48,8 +48,6 @@ export default function GoogleCallbackPage() {
           return
         }
 
-        console.log('Received Google authorization code, exchanging for token...')
-        console.log('Debug info:', debugInfo)
 
         // Send the code to your backend to exchange for tokens
         const response = await fetch('/api/auth/google/callback', {
@@ -83,7 +81,6 @@ export default function GoogleCallbackPage() {
         }
 
         const data = await response.json()
-        console.log('Received authentication data from backend:', data)
 
         // Use the googleLogin method to update the auth state
         const result = await googleLogin(data.token)
@@ -94,7 +91,6 @@ export default function GoogleCallbackPage() {
           return
         }
 
-        console.log('Authentication successful, redirecting to dashboard...')
         // Redirect to dashboard
         router.push('/dashboard')
       } catch (err) {

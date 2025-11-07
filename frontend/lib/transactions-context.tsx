@@ -95,9 +95,7 @@ export function TransactionsProvider({ children }: { children: React.ReactNode }
   // Fetch recurring transactions from backend using transactionAPI
   const fetchRecurringTransactions = async () => {
     try {
-      console.log('Fetching recurring transactions...');
       const response = await transactionAPI.getRecurringTransactions()
-      console.log('Fetched recurring transactions:', response.data);
       setRecurringTransactions(response.data || [])
     } catch (err) {
       console.error('Error fetching recurring transactions:', err);
@@ -257,14 +255,11 @@ export function TransactionsProvider({ children }: { children: React.ReactNode }
 
   const deleteRecurringTransaction = async (id: string) => {
     try {
-      console.log(`Deleting recurring transaction with ID: ${id}`);
       await transactionAPI.deleteRecurringTransaction(id)
       
       // Update the state immediately
-      console.log('Updating state after deletion...');
       setRecurringTransactions(prev => {
         const updatedList = prev.filter(r => r._id !== id);
-        console.log('Updated list:', updatedList);
         return updatedList;
       })
       

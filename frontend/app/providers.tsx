@@ -33,7 +33,6 @@ export function Providers({ children }: ProvidersProps) {
     script.defer = true
     
     script.onload = () => {
-      console.log('Google Sign-In script loaded successfully')
       setGoogleScriptLoaded(true)
     }
     

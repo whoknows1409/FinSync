@@ -91,7 +91,6 @@ export interface TradingStats {
 // Add a function to initialize trading account with improved error handling
 export const initializeTradingAccount = async (): Promise<boolean> => {
   try {
-    console.log('Initializing trading account...');
     const response = await axios.get(`${API_BASE_URL}/v1/trading/account`, {
       params: { 
         _: Date.now(),
@@ -105,7 +104,6 @@ export const initializeTradingAccount = async (): Promise<boolean> => {
         'Expires': '0'
       }
     });
-    console.log('Trading account initialized:', response.data);
     return true;
   } catch (error) {
     console.error('Error initializing trading account:', error);
@@ -118,7 +116,6 @@ export const searchStocks = async (query: string): Promise<Stock[]> => {
   try {
     if (!query || query.length < 1) return [];
     
-    console.log('Searching stocks with query:', query);
     
     // Generate a unique cache buster
     const uniqueCacheBuster = `${Date.now()}-${Math.random()}`;
@@ -138,7 +135,6 @@ export const searchStocks = async (query: string): Promise<Stock[]> => {
       }
     });
     
-    console.log('Search response:', response.data);
     
     // Check if the response has the expected structure
     if (response.data && response.data.success && response.data.data && response.data.data.stocks) {
@@ -155,7 +151,6 @@ export const searchStocks = async (query: string): Promise<Stock[]> => {
 // Get real-time stock data with improved error handling
 export const getRealTimeStockData = async (symbol: string, cacheBuster?: number): Promise<Stock> => {
   try {
-    console.log('Getting real-time stock data for:', symbol);
     
     // Generate a unique cache buster
     const uniqueCacheBuster = cacheBuster || `${Date.now()}-${Math.random()}`;
@@ -174,7 +169,6 @@ export const getRealTimeStockData = async (symbol: string, cacheBuster?: number)
       }
     });  
     
-    console.log('Real-time stock data response:', response.data);
     
     const realTimeData = response.data.data;
     
@@ -202,7 +196,6 @@ export const getRealTimeStockData = async (symbol: string, cacheBuster?: number)
     
     // Fallback to regular stock details if real-time fails
     try {
-      console.log('Falling back to regular stock details for:', symbol);
       return await getStockDetails(symbol, '1d', cacheBuster);
     } catch (fallbackError) {
       console.error('Fallback also failed:', fallbackError);
@@ -214,7 +207,6 @@ export const getRealTimeStockData = async (symbol: string, cacheBuster?: number)
 // Updated getStockDetails to include interval parameter and cache-busting
 export const getStockDetails = async (symbol: string, interval: string = '1d', cacheBuster?: number): Promise<Stock> => {
   try {
-    console.log('Getting stock details for:', symbol, 'with interval:', interval);
     
     // For real-time data (1m interval), use the real-time endpoint
     if (interval === '1m') {
@@ -242,15 +234,11 @@ export const getStockDetails = async (symbol: string, interval: string = '1d', c
       }
     });  
     
-    console.log('Stock details response:', response.data);
     
     // Extract the stock object from the response
     const stock = response.data.data.stock;
     
     // Log the stock object to see what fields are available
-    console.log('Stock object:', stock);
-    console.log('Stock _id:', stock._id);
-    console.log('Stock id:', stock.id);
     
     // Calculate change and changePercent if not available
     if (!stock.change || !stock.changePercent) {
@@ -284,7 +272,6 @@ export const getStockDetails = async (symbol: string, interval: string = '1d', c
 // Trading Account Management with improved error handling
 export const getTradingAccount = async () => {
   try {
-    console.log('Getting trading account');
     
     // Generate a unique cache buster
     const uniqueCacheBuster = `${Date.now()}-${Math.random()}`;
@@ -303,7 +290,6 @@ export const getTradingAccount = async () => {
       }
     });
     
-    console.log('Trading account response:', response.data);
     return response.data.data;
   } catch (error) {
     console.error('Error fetching trading account:', error);
@@ -322,7 +308,6 @@ export const getTradingAccount = async () => {
 
 export const getHoldings = async (): Promise<Holding[]> => {
   try {
-    console.log('Getting holdings');
     
     // Generate a unique cache buster
     const uniqueCacheBuster = `${Date.now()}-${Math.random()}`;
@@ -341,7 +326,6 @@ export const getHoldings = async (): Promise<Holding[]> => {
       }
     });
     
-    console.log('Holdings response:', response.data);
     return response.data.data.holdings;
   } catch (error) {
     console.error('Error fetching holdings:', error);
@@ -351,7 +335,6 @@ export const getHoldings = async (): Promise<Holding[]> => {
 
 export const getOrders = async (): Promise<Order[]> => {
   try {
-    console.log('Getting orders');
     
     // Generate a unique cache buster
     const uniqueCacheBuster = `${Date.now()}-${Math.random()}`;
@@ -370,7 +353,6 @@ export const getOrders = async (): Promise<Order[]> => {
       }
     });
     
-    console.log('Orders response:', response.data);
     return response.data.data.orders;
   } catch (error) {
     console.error('Error fetching orders:', error);
@@ -380,7 +362,6 @@ export const getOrders = async (): Promise<Order[]> => {
 
 export const getTradingStats = async (): Promise<TradingStats> => {
   try {
-    console.log('Getting trading stats');
     
     // Generate a unique cache buster
     const uniqueCacheBuster = `${Date.now()}-${Math.random()}`;
@@ -399,7 +380,6 @@ export const getTradingStats = async (): Promise<TradingStats> => {
       }
     });
     
-    console.log('Trading stats response:', response.data);
     return response.data.data;
   } catch (error) {
     console.error('Error fetching trading stats:', error);
@@ -431,7 +411,6 @@ export interface PlaceOrderParams {
 // Update the placeOrder function to handle insufficient holdings more gracefully
 export const placeOrder = async (params: PlaceOrderParams) => {
   try {
-    console.log('Placing order with params:', params);
     
     // First, ensure the trading account is initialized
     try {
@@ -450,7 +429,6 @@ export const placeOrder = async (params: PlaceOrderParams) => {
       }
     });
     
-    console.log('Place order response:', response.data);
     return response.data.data.order;
   } catch (error: any) {
     console.error('Error placing order:', error);
@@ -468,12 +446,9 @@ export const placeOrder = async (params: PlaceOrderParams) => {
         
         // Try to initialize the trading account stats
         try {
-          console.log('Attempting to initialize trading account stats...');
           await initializeTradingAccount();
-          console.log('Trading account stats initialized successfully');
           
           // Retry placing the order after initialization
-          console.log('Retrying order placement...');
           const retryResponse = await axios.post(`${API_BASE_URL}/v1/trading/orders`, params, {
             timeout: 15000,
             headers: {
@@ -483,7 +458,6 @@ export const placeOrder = async (params: PlaceOrderParams) => {
             }
           });
           
-          console.log('Retry place order response:', retryResponse.data);
           return retryResponse.data.data.order;
         } catch (initError: any) {
           console.error('Failed to initialize trading account:', initError);
@@ -521,7 +495,6 @@ export const placeOrder = async (params: PlaceOrderParams) => {
 
 export const cancelOrder = async (orderId: string) => {
   try {
-    console.log('Cancelling order:', orderId);
     
     // Generate a unique cache buster
     const uniqueCacheBuster = `${Date.now()}-${Math.random()}`;
@@ -540,7 +513,6 @@ export const cancelOrder = async (orderId: string) => {
       }
     });
     
-    console.log('Cancel order response:', response.data);
     return response.data;
   } catch (error: any) {
     console.error('Error cancelling order:', error);
@@ -557,7 +529,6 @@ export const getStockHistoricalData = async (
   cacheBuster?: number
 ): Promise<any[]> => {
   try {
-    console.log(`Fetching historical data for ${symbol} with timeframe ${timeframe} and interval ${interval}`);
     
     // Define valid intervals for each timeframe
     const validIntervals: Record<string, string[]> = {
@@ -610,7 +581,6 @@ export const getStockHistoricalData = async (
       }
     });
     
-    console.log('Historical data response:', response.data);
     
     if (response.data.success) {
       // Transform the data to match our expected format
@@ -634,7 +604,6 @@ export const getStockHistoricalData = async (
 // Add a function to check API health
 export const checkApiHealth = async (): Promise<boolean> => {
   try {
-    console.log('Checking API health...');
     const response = await axios.get(`${API_BASE_URL}/v1/stocks/health`, {
       timeout: 5000,
       headers: {
@@ -644,7 +613,6 @@ export const checkApiHealth = async (): Promise<boolean> => {
       }
     });
     
-    console.log('API health check response:', response.data);
     return response.data.success;
   } catch (error) {
     console.error('API health check failed:', error);
