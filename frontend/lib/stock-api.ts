@@ -433,11 +433,11 @@ export const placeOrder = async (params: PlaceOrderParams) => {
   } catch (error: any) {
     console.error('Error placing order:', error);
     
-    // Enhanced error logging
+    // Enhanced error logging (sanitized for security)
     if (error.response) {
       console.error('Error response status:', error.response.status);
-      console.error('Error response headers:', error.response.headers);
-      console.error('Error response data:', error.response.data);
+      // Don't log full response data - may contain sensitive info
+      console.error('Error message:', error.response.data?.message || 'Unknown error');
       
       // Check for the specific error about totalTrades
       if (error.response.data && error.response.data.message && 
@@ -484,8 +484,10 @@ export const placeOrder = async (params: PlaceOrderParams) => {
         });
       }
       
-      // Log the request payload for comparison
-      console.error('Request payload that caused the error:', params);
+      // Log sanitized request info (don't log full params - may contain sensitive data)
+      console.error('Order type:', params.orderType);
+      console.error('Symbol:', params.symbol);
+      console.error('Quantity:', params.quantity);
     }
     
     const errorMessage = error.response?.data?.message || error.message || 'Failed to place order';
