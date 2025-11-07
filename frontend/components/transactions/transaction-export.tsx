@@ -95,7 +95,7 @@ export function TransactionExport({ open, onClose }: TransactionExportProps) {
         // Add title
         doc.setFontSize(20)
         doc.setFont('helvetica', 'bold')
-        doc.text('Transaction Report', 105, 15, { align: 'center' })
+        doc.text('FinSync - Transaction Report', 105, 15, { align: 'center' })
         
         // Add date range
         doc.setFontSize(11)
