@@ -124,10 +124,15 @@ export class GeminiAPI {
         throw new Error('Invalid response structure from Gemini API')
       }
       
+      // Check if the response has parts
+      if (!data.candidates[0].content.parts || !data.candidates[0].content.parts.length) {
+        console.error('No parts in Gemini API response:', data)
+        throw new Error('Empty response from Gemini API')
+      }
+      
       // Check if the response was truncated due to max tokens
       if (data.candidates[0].finishReason === 'MAX_TOKENS') {
-        console.warn('Gemini API response truncated due to max tokens')
-        // We'll still return the truncated response
+        // Response was truncated but we'll still return what we got
       }
       
       return data
@@ -166,11 +171,20 @@ export class GeminiAPI {
 
       const response = await this.makeRequest(messages, options)
       
-      if (response.candidates && response.candidates.length > 0 && response.candidates[0].content.parts.length > 0) {
-        return response.candidates[0].content.parts[0].text
-      } else {
-        throw new Error('No response from Gemini API')
+      // Validate response structure
+      if (!response.candidates || !response.candidates.length) {
+        throw new Error('No candidates in Gemini API response')
       }
+      
+      if (!response.candidates[0].content) {
+        throw new Error('No content in Gemini API response')
+      }
+      
+      if (!response.candidates[0].content.parts || !response.candidates[0].content.parts.length) {
+        throw new Error('No parts in Gemini API response')
+      }
+      
+      return response.candidates[0].content.parts[0].text
     } catch (error) {
       console.error('Gemini API Error:', error)
       throw error
@@ -270,17 +284,18 @@ export class GeminiAPI {
         throw new Error('Invalid response structure from Gemini API')
       }
       
-      // Check if the response was truncated due to max tokens
-      if (data.candidates[0].finishReason === 'MAX_TOKENS') {
-        console.warn('Gemini API response truncated due to max tokens')
-        // We'll still return the truncated response
+      // Check if the response has parts
+      if (!data.candidates[0].content.parts || !data.candidates[0].content.parts.length) {
+        console.error('No parts in Gemini API response:', data)
+        throw new Error('Empty response from Gemini API')
       }
       
-      if (data.candidates[0].content.parts.length > 0) {
-        return data.candidates[0].content.parts[0].text.trim()
-      } else {
-        throw new Error('No response from Gemini API')
+      // Check if the response was truncated due to max tokens
+      if (data.candidates[0].finishReason === 'MAX_TOKENS') {
+        // Response was truncated but we'll still return what we got
       }
+      
+      return data.candidates[0].content.parts[0].text.trim()
     } catch (error) {
       console.error('Gemini API Error:', error)
       throw error
