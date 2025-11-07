@@ -130,9 +130,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // Internal refresh function without state management
   const refreshBudgetsInternal = useCallback(async () => {
     try {
-      console.log("Refreshing budgets...")
       const response = await budgetAPI.getBudgets()
-      console.log("Budgets API response:", response)
       
       // Handle both success and error cases
       if (response.success && Array.isArray(response.data)) {

@@ -224,7 +224,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem("refreshToken", refreshToken)
       }
       
-      console.log('✅ Google authentication successful')
       toast.success('Successfully logged in with Google!')
       return { success: true }
     } catch (err) {

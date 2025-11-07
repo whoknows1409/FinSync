@@ -19,23 +19,13 @@ const apiRequest = async (endpoint, options = {}) => {
       ...options
     };
 
-    console.log(`🚀 API Request: ${endpoint}`, {
-      method: config.method || 'GET',
-      headers: config.headers,
-      hasBody: !!config.body
-    });
-
     const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
-    
-    // Log response status
-    console.log(`📡 API Response Status: ${response.status} for ${endpoint}`);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       console.error(`❌ API Error: ${endpoint}`, {
         status: response.status,
-        statusText: response.statusText,
-        error: errorData
+        message: errorData.message || response.statusText
       });
       
       const error = new Error(errorData.message || 'API request failed');
@@ -45,10 +35,9 @@ const apiRequest = async (endpoint, options = {}) => {
     }
     
     const data = await response.json();
-    console.log(`✅ API Success: ${endpoint}`, { data });
     return data;
   } catch (error) {
-    console.error(`💥 API Request Failed: ${endpoint}`, error);
+    console.error(`💥 API Request Failed: ${endpoint}`, error.message || error);
     throw error;
   }
 };

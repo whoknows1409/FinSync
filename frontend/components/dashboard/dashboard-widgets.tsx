@@ -337,7 +337,6 @@ export function BudgetOverviewWidget() {
     return budgets.filter(budget => {
       // Skip budgets with zero amount
       if (budget.totalAmount === 0) {
-        console.log(`Skipping budget with zero amount: ${budget.category} (${budget._id})`);
         return false;
       }
       
