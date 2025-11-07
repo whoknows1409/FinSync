@@ -15,9 +15,10 @@ export interface GeminiMessage {
 export interface GeminiResponse {
   candidates: Array<{
     content: {
-      parts: Array<{
+      parts?: Array<{
         text: string
       }>
+      text?: string  // Alternative structure for some API versions
     }
     finishReason?: string
     index: number
@@ -119,20 +120,27 @@ export class GeminiAPI {
       const data = await response.json()
       
       // Check if the response has the expected structure
-      if (!data.candidates || !data.candidates.length || !data.candidates[0].content) {
-        console.error('Invalid Gemini API response structure:', data)
+      if (!data.candidates || !data.candidates.length) {
+        console.error('Invalid Gemini API response - no candidates:', data)
         throw new Error('Invalid response structure from Gemini API')
       }
       
-      // Check if the response has parts
-      if (!data.candidates[0].content.parts || !data.candidates[0].content.parts.length) {
-        console.error('No parts in Gemini API response:', data)
-        throw new Error('Empty response from Gemini API')
+      const candidate = data.candidates[0]
+      
+      if (!candidate.content) {
+        console.error('Invalid Gemini API response - no content:', data)
+        throw new Error('Invalid response structure from Gemini API')
       }
       
-      // Check if the response was truncated due to max tokens
-      if (data.candidates[0].finishReason === 'MAX_TOKENS') {
-        // Response was truncated but we'll still return what we got
+      // Check if the response has parts - handle both structures
+      if (!candidate.content.parts || !candidate.content.parts.length) {
+        // Some API versions might return text directly
+        if (candidate.content.text) {
+          // Return data as-is, will be handled in calling code
+          return data
+        }
+        console.error('Invalid Gemini API response - no parts or text:', data)
+        throw new Error('Empty response from Gemini API')
       }
       
       return data
@@ -176,15 +184,20 @@ export class GeminiAPI {
         throw new Error('No candidates in Gemini API response')
       }
       
-      if (!response.candidates[0].content) {
+      const candidate = response.candidates[0]
+      
+      if (!candidate.content) {
         throw new Error('No content in Gemini API response')
       }
       
-      if (!response.candidates[0].content.parts || !response.candidates[0].content.parts.length) {
-        throw new Error('No parts in Gemini API response')
+      // Handle both response structures: parts array or direct text
+      if (candidate.content.parts && candidate.content.parts.length > 0) {
+        return candidate.content.parts[0].text
+      } else if (candidate.content.text) {
+        return candidate.content.text
+      } else {
+        throw new Error('No text content in Gemini API response')
       }
-      
-      return response.candidates[0].content.parts[0].text
     } catch (error) {
       console.error('Gemini API Error:', error)
       throw error
@@ -263,12 +276,15 @@ export class GeminiAPI {
             });
             if (r2.ok) {
               const d2 = await r2.json();
-              // mimic normal flow
+              // Handle both response structures
               if (!d2.candidates || !d2.candidates.length || !d2.candidates[0].content) {
                 throw new Error('Invalid response structure from Gemini API');
               }
-              if (d2.candidates[0].content.parts.length > 0) {
-                return d2.candidates[0].content.parts[0].text.trim();
+              const fallbackCandidate = d2.candidates[0]
+              if (fallbackCandidate.content.parts && fallbackCandidate.content.parts.length > 0) {
+                return fallbackCandidate.content.parts[0].text.trim();
+              } else if (fallbackCandidate.content.text) {
+                return fallbackCandidate.content.text.trim();
               }
             }
           }
@@ -279,23 +295,27 @@ export class GeminiAPI {
       const data = await response.json()
       
       // Check if the response has the expected structure
-      if (!data.candidates || !data.candidates.length || !data.candidates[0].content) {
-        console.error('Invalid Gemini API response structure:', data)
+      if (!data.candidates || !data.candidates.length) {
+        console.error('Invalid Gemini API response - no candidates:', data)
         throw new Error('Invalid response structure from Gemini API')
       }
       
-      // Check if the response has parts
-      if (!data.candidates[0].content.parts || !data.candidates[0].content.parts.length) {
-        console.error('No parts in Gemini API response:', data)
+      const candidate = data.candidates[0]
+      
+      if (!candidate.content) {
+        console.error('Invalid Gemini API response - no content:', data)
+        throw new Error('Invalid response structure from Gemini API')
+      }
+      
+      // Handle both response structures: parts array or direct text
+      if (candidate.content.parts && candidate.content.parts.length > 0) {
+        return candidate.content.parts[0].text.trim()
+      } else if (candidate.content.text) {
+        return candidate.content.text.trim()
+      } else {
+        console.error('Invalid Gemini API response - no text content:', data)
         throw new Error('Empty response from Gemini API')
       }
-      
-      // Check if the response was truncated due to max tokens
-      if (data.candidates[0].finishReason === 'MAX_TOKENS') {
-        // Response was truncated but we'll still return what we got
-      }
-      
-      return data.candidates[0].content.parts[0].text.trim()
     } catch (error) {
       console.error('Gemini API Error:', error)
       throw error
