@@ -37,7 +37,7 @@ export class GeminiAPI {
   constructor() {
     // Use system-managed API key from environment variable only
     this.apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-    const model = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-1.5-flash';
+    const model = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash';
     this.baseUrl = process.env.NEXT_PUBLIC_GEMINI_API_URL || `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent`;
   }
 
