@@ -190,6 +190,16 @@ export class GeminiAPI {
         throw new Error('No content in Gemini API response')
       }
       
+      // Debug: Log the actual response structure
+      console.log('SendMessage - Gemini API Response Structure:', {
+        hasContent: !!candidate.content,
+        hasParts: !!candidate.content.parts,
+        partsLength: candidate.content.parts?.length,
+        hasDirectText: !!candidate.content.text,
+        contentKeys: Object.keys(candidate.content),
+        fullContent: candidate.content
+      })
+      
       // Handle both response structures: parts array or direct text
       if (candidate.content.parts && candidate.content.parts.length > 0) {
         return candidate.content.parts[0].text
@@ -306,6 +316,16 @@ export class GeminiAPI {
         console.error('Invalid Gemini API response - no content:', data)
         throw new Error('Invalid response structure from Gemini API')
       }
+      
+      // Debug: Log the actual response structure
+      console.log('Gemini API Response Structure:', {
+        hasContent: !!candidate.content,
+        hasParts: !!candidate.content.parts,
+        partsLength: candidate.content.parts?.length,
+        hasDirectText: !!candidate.content.text,
+        contentKeys: Object.keys(candidate.content),
+        fullContent: candidate.content
+      })
       
       // Handle both response structures: parts array or direct text
       if (candidate.content.parts && candidate.content.parts.length > 0) {
