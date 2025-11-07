@@ -11,6 +11,7 @@ import { NotificationsProvider } from "@/lib/notifications-context"
 import { GoalsProvider } from "@/lib/goals-context"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { Toaster } from "@/components/ui/sonner"
+import { BackendWakeup } from "@/components/backend-wakeup"
 import { cn } from "@/lib/utils"
 
 const inter = Inter({ subsets: ["latin"], preload: false })
@@ -44,6 +45,7 @@ export default function RootLayout({
                   <BudgetProvider>
                     <NotificationsProvider>
                       <GoalsProvider>
+                        <BackendWakeup />
                         <div className="flex min-h-screen flex-col bg-background">
                           {children}
                         </div>
