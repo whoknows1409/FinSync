@@ -446,7 +446,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👨‍💻 Author
 
-**Daksh Bari**
+**Omkar Bhoir**
 
 - GitHub: [@whoknows1409](https://github.com/whoknows1409)
 - Repository: [finsync](https://github.com/whoknows1409/finsync)
@@ -503,7 +503,7 @@ Need help? Here are your options:
 
 **⭐ Star this repo if you find it helpful!**
 
-**Made with ❤️ by Daksh Bari**
+**Credits: Omkar Bhoir, Omkar Bhoir**
 
 [⬆ Back to Top](#-finsync---unified-finance-management-platform)
 
