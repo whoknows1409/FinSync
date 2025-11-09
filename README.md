@@ -503,7 +503,7 @@ Need help? Here are your options:
 
 **⭐ Star this repo if you find it helpful!**
 
-**Credits: Omkar Bhoir, Omkar Bhoir**
+**Credits: Omkar Bhoir, Daksh Bari**
 
 [⬆ Back to Top](#-finsync---unified-finance-management-platform)
 
