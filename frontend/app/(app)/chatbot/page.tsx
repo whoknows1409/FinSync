@@ -184,7 +184,7 @@ export default function ChatbotPage() {
 
   const insights = generateInsights()
 
-  // Export functionality - Direct PDF export with formatting
+  // Export functionality - Direct PDF export with formatting matching frontend
   const exportToPDF = async () => {
     if (!selectedChat || !selectedChat.messages.length) {
       alert("No messages to export")
@@ -206,7 +206,7 @@ export default function ChatbotPage() {
       const contentWidth = pageWidth - (margin * 2)
       let yPosition = margin
 
-      // Helper function to check if we need a new page
+      // Helper to check page breaks
       const checkPageBreak = (requiredSpace: number) => {
         if (yPosition + requiredSpace > pageHeight - margin) {
           pdf.addPage()
@@ -216,118 +216,225 @@ export default function ChatbotPage() {
         return false
       }
 
-      // Helper function to sanitize text for PDF (fix rupee symbol and other special chars)
+      // Helper to sanitize text (fix rupee symbol)
       const sanitizeText = (text: string) => {
         return text
-          .replace(/₹/g, 'Rs. ') // Replace rupee symbol with Rs.
-          .replace(/\u20B9/g, 'Rs. ') // Replace Unicode rupee
-          .replace(/[^\x00-\x7F]/g, (char) => { // Handle other non-ASCII chars
-            const code = char.charCodeAt(0)
-            if (code === 8377) return 'Rs. ' // Another rupee encoding
-            return char // Keep other Unicode chars
+          .replace(/₹/g, 'Rs. ')
+          .replace(/\u20B9/g, 'Rs. ')
+          .replace(/[^\x00-\x7F]/g, (char) => {
+            if (char.charCodeAt(0) === 8377) return 'Rs. '
+            return char
           })
       }
 
-      // Helper function to parse and render formatted content
+      // Render formatted content matching frontend MessageRenderer
       const renderFormattedContent = (content: string, boxX: number, maxWidth: number) => {
         const lines = content.split('\n')
+        let inCodeBlock = false
+        let codeBlockLines: string[] = []
+        let tableRows: string[][] = []
+        let inTable = false
         
         for (let i = 0; i < lines.length; i++) {
           let line = sanitizeText(lines[i])
           
-          // Check for headers
-          if (line.match(/^#{1,3}\s+/)) {
-            checkPageBreak(12)
-            const headerText = line.replace(/^#{1,3}\s+/, '')
-            const level = (line.match(/^(#{1,3})/)?.[0].length || 1)
-            const fontSize = level === 1 ? 14 : level === 2 ? 12 : 11
+          // Handle code blocks
+          if (line.trim().startsWith('```')) {
+            if (inCodeBlock) {
+              // End code block - render it
+              checkPageBreak(codeBlockLines.length * 4 + 8)
+              pdf.setFillColor(26, 32, 44) // Dark background like frontend
+              const blockHeight = codeBlockLines.length * 4 + 4
+              pdf.roundedRect(boxX, yPosition - 2, maxWidth, blockHeight, 1, 1, 'F')
+              
+              pdf.setTextColor(229, 231, 235) // Light text
+              pdf.setFont('courier', 'normal')
+              pdf.setFontSize(8)
+              codeBlockLines.forEach((codeLine) => {
+                pdf.text(codeLine, boxX + 2, yPosition)
+                yPosition += 4
+              })
+              yPosition += 4
+              codeBlockLines = []
+              inCodeBlock = false
+              pdf.setFont('helvetica', 'normal')
+            } else {
+              inCodeBlock = true
+            }
+            continue
+          }
+
+          if (inCodeBlock) {
+            codeBlockLines.push(line)
+            continue
+          }
+
+          // Handle tables
+          if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+            if (!inTable) inTable = true
+            const cells = line.split('|').slice(1, -1).map(cell => sanitizeText(cell.trim()))
+            tableRows.push(cells)
+            continue
+          } else if (inTable && tableRows.length > 0) {
+            // Render table
+            const headers = tableRows[0]
+            const body = tableRows.slice(2) // Skip separator row
+            
+            checkPageBreak((body.length + 1) * 8 + 10)
+            
+            const cellWidth = maxWidth / headers.length
+            
+            // Header row with gray background
+            pdf.setFillColor(249, 250, 251)
+            pdf.rect(boxX, yPosition - 3, maxWidth, 7, 'F')
+            pdf.setDrawColor(229, 231, 235)
+            pdf.rect(boxX, yPosition - 3, maxWidth, 7, 'S')
             
             pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(fontSize)
-            pdf.setTextColor(40, 40, 40)
-            const headerLines = pdf.splitTextToSize(headerText, maxWidth)
-            headerLines.forEach((headerLine: string) => {
-              pdf.text(headerLine, boxX, yPosition)
-              yPosition += fontSize * 0.4
+            pdf.setFontSize(8)
+            pdf.setTextColor(107, 114, 128)
+            headers.forEach((header, idx) => {
+              const cellX = boxX + (idx * cellWidth)
+              pdf.text(header.toUpperCase().substring(0, 20), cellX + 2, yPosition)
+            })
+            yPosition += 7
+            
+            // Body rows
+            pdf.setFont('helvetica', 'normal')
+            pdf.setFontSize(9)
+            pdf.setTextColor(55, 65, 81)
+            body.forEach((row) => {
+              checkPageBreak(7)
+              pdf.setDrawColor(229, 231, 235)
+              pdf.rect(boxX, yPosition - 3, maxWidth, 7, 'S')
+              
+              row.forEach((cell, idx) => {
+                const cellX = boxX + (idx * cellWidth)
+                const cellText = cell.length > 22 ? cell.substring(0, 19) + '...' : cell
+                pdf.text(cellText, cellX + 2, yPosition)
+              })
+              yPosition += 7
             })
             yPosition += 4
             
-            // Underline for H1
+            tableRows = []
+            inTable = false
+            continue
+          }
+
+          // Handle headers (matching frontend H1, H2, H3 styling)
+          const headerMatch = line.match(/^(#{1,3})\s+(.+)$/)
+          if (headerMatch) {
+            const level = headerMatch[1].length
+            const text = headerMatch[2]
+            const fontSize = level === 1 ? 16 : level === 2 ? 14 : 12
+            
+            checkPageBreak(fontSize + 6)
+            
+            pdf.setFont('helvetica', 'bold')
+            pdf.setFontSize(fontSize)
+            pdf.setTextColor(17, 24, 39) // Dark gray
+            
+            const headerLines = pdf.splitTextToSize(text, maxWidth)
+            headerLines.forEach((headerLine: string) => {
+              pdf.text(headerLine, boxX, yPosition)
+              yPosition += fontSize * 0.35
+            })
+            
+            // Border bottom for H1 (matching frontend)
             if (level === 1) {
-              pdf.setDrawColor(200, 200, 200)
-              pdf.line(boxX, yPosition - 2, boxX + maxWidth * 0.5, yPosition - 2)
               yPosition += 2
+              pdf.setDrawColor(229, 231, 235)
+              pdf.setLineWidth(0.3)
+              pdf.line(boxX, yPosition, boxX + maxWidth, yPosition)
+              yPosition += 3
+            } else {
+              yPosition += 4
             }
             
             pdf.setFont('helvetica', 'normal')
             continue
           }
-          
-          // Check for lists
+
+          // Handle lists (matching frontend blue bullets)
           if (line.match(/^[\*\-]\s+/) || line.match(/^\d+\.\s+/)) {
-            checkPageBreak(8)
-            const listText = line.replace(/^[\*\-]\s+/, '• ').replace(/^\d+\.\s+/, (match) => match)
+            checkPageBreak(7)
+            
+            const isOrdered = line.match(/^\d+\.\s+/)
+            const listText = isOrdered 
+              ? line 
+              : line.replace(/^[\*\-]\s+/, '')
+            
             pdf.setFontSize(10)
-            pdf.setTextColor(60, 60, 60)
-            const listLines = pdf.splitTextToSize(listText, maxWidth - 5)
-            listLines.forEach((listLine: string) => {
-              pdf.text(listLine, boxX + 3, yPosition)
-              yPosition += 5
-            })
+            pdf.setTextColor(55, 65, 81)
+            
+            if (!isOrdered) {
+              // Blue bullet point (matching frontend)
+              pdf.setFillColor(59, 130, 246)
+              pdf.circle(boxX + 3, yPosition - 1.5, 1, 'F')
+              
+              const textLines = pdf.splitTextToSize(listText, maxWidth - 10)
+              textLines.forEach((textLine: string) => {
+                pdf.text(textLine, boxX + 8, yPosition)
+                yPosition += 5
+              })
+            } else {
+              const textLines = pdf.splitTextToSize(listText, maxWidth - 5)
+              textLines.forEach((textLine: string) => {
+                pdf.text(textLine, boxX + 5, yPosition)
+                yPosition += 5
+              })
+            }
             continue
           }
-          
-          // Check for table rows
-          if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
-            if (line.match(/^\|[\s\-:]+\|$/)) continue // Skip separator
-            
-            checkPageBreak(8)
-            const cells = line.split('|').slice(1, -1).map(cell => sanitizeText(cell.trim()))
-            const cellWidth = maxWidth / cells.length
-            
-            pdf.setFontSize(9)
-            pdf.setTextColor(40, 40, 40)
-            pdf.setFont('helvetica', 'normal')
-            
-            cells.forEach((cell, index) => {
-              const cellX = boxX + (index * cellWidth)
-              const cellText = cell.length > 25 ? cell.substring(0, 22) + '...' : cell
-              pdf.text(cellText, cellX + 1, yPosition)
-            })
-            
-            // Draw table borders
-            pdf.setDrawColor(200, 200, 200)
-            pdf.setLineWidth(0.1)
-            cells.forEach((_, index) => {
-              const cellX = boxX + (index * cellWidth)
-              pdf.rect(cellX, yPosition - 4, cellWidth, 6)
-            })
-            yPosition += 7
-            continue
-          }
-          
-          // Check for horizontal rules
+
+          // Handle horizontal rules
           if (line.match(/^-{3,}$/)) {
             checkPageBreak(4)
-            pdf.setDrawColor(200, 200, 200)
+            pdf.setDrawColor(229, 231, 235)
+            pdf.setLineWidth(0.3)
             pdf.line(boxX, yPosition, boxX + maxWidth, yPosition)
             yPosition += 4
             continue
           }
-          
+
+          // Handle blockquotes
+          if (line.trim().startsWith('>')) {
+            checkPageBreak(8)
+            const quoteText = line.replace(/^>\s*/, '')
+            
+            // Left border (blue accent like frontend)
+            pdf.setDrawColor(59, 130, 246)
+            pdf.setLineWidth(1)
+            pdf.line(boxX, yPosition - 3, boxX, yPosition + 2)
+            
+            pdf.setFontSize(10)
+            pdf.setTextColor(107, 114, 128)
+            pdf.setFont('helvetica', 'italic')
+            const quoteLines = pdf.splitTextToSize(quoteText, maxWidth - 8)
+            quoteLines.forEach((quoteLine: string) => {
+              pdf.text(quoteLine, boxX + 5, yPosition)
+              yPosition += 5
+            })
+            yPosition += 2
+            pdf.setFont('helvetica', 'normal')
+            continue
+          }
+
           // Regular text with inline formatting
           if (line.trim() !== '') {
             checkPageBreak(8)
             
-            // Remove markdown formatting for PDF
+            // Remove markdown for PDF but preserve structure
             let processedText = line
               .replace(/\*\*([^*]+)\*\*/g, '$1') // Bold
-              .replace(/\*([^*]+)\*/g, '$1') // Italic
+              .replace(/\*([^*]+)\*/g, '$1') // Italic  
               .replace(/`([^`]+)`/g, '$1') // Inline code
             
             pdf.setFontSize(10)
-            pdf.setTextColor(60, 60, 60)
+            pdf.setTextColor(55, 65, 81)
             pdf.setFont('helvetica', 'normal')
+            
             const textLines = pdf.splitTextToSize(processedText, maxWidth)
             textLines.forEach((textLine: string) => {
               pdf.text(textLine, boxX, yPosition)
@@ -340,7 +447,7 @@ export default function ChatbotPage() {
         }
       }
 
-      // Header
+      // Header (matching frontend blue theme)
       pdf.setFillColor(59, 130, 246)
       pdf.rect(0, 0, pageWidth, 25, 'F')
       
@@ -355,7 +462,7 @@ export default function ChatbotPage() {
       
       yPosition = 35
 
-      // Messages
+      // Messages (matching frontend chat bubbles)
       selectedChat.messages.forEach((message) => {
         const isUser = message.role === 'user'
         
@@ -363,37 +470,51 @@ export default function ChatbotPage() {
         
         // Message role label
         pdf.setFont('helvetica', 'bold')
-        pdf.setFontSize(11)
-        pdf.setTextColor(isUser ? 59 : 100, isUser ? 130 : 100, isUser ? 246 : 100)
+        pdf.setFontSize(10)
+        pdf.setTextColor(isUser ? 59 : 107, isUser ? 130 : 114, isUser ? 246 : 128)
         pdf.text(isUser ? 'You' : 'Finsync AI', margin, yPosition)
         yPosition += 7
         
-        // Message content box
+        // Message box (matching frontend styling)
         const boxX = margin + 2
         const boxWidth = contentWidth - 4
         const contentStartY = yPosition
         
-        // Render formatted content
-        renderFormattedContent(message.content, boxX + 2, boxWidth - 4)
+        // Render content first to calculate height
+        renderFormattedContent(message.content, boxX + 3, boxWidth - 6)
         
-        // Draw box around message
-        const boxHeight = yPosition - contentStartY + 2
-        pdf.setDrawColor(isUser ? 59 : 220, isUser ? 130 : 220, isUser ? 246 : 220)
-        pdf.setFillColor(isUser ? 240 : 249, isUser ? 248 : 250, isUser ? 255 : 251)
-        pdf.setLineWidth(0.3)
-        pdf.roundedRect(boxX, contentStartY - 3, boxWidth, boxHeight, 2, 2, 'FD')
+        // Draw message box with proper colors
+        const boxHeight = yPosition - contentStartY + 4
+        
+        if (isUser) {
+          pdf.setFillColor(59, 130, 246) // Blue for user (matching frontend)
+          pdf.setDrawColor(59, 130, 246)
+        } else {
+          pdf.setFillColor(249, 250, 251) // Light gray for AI (matching frontend)
+          pdf.setDrawColor(229, 231, 235)
+        }
+        
+        pdf.setLineWidth(0.5)
+        pdf.roundedRect(boxX, contentStartY - 3, boxWidth, boxHeight, 3, 3, 'FD')
         
         // Re-render content on top of box
         yPosition = contentStartY
-        renderFormattedContent(message.content, boxX + 2, boxWidth - 4)
         
-        yPosition += 8
+        // Change text color for user messages (white on blue)
+        if (isUser) {
+          const originalRender = renderFormattedContent
+          renderFormattedContent(message.content, boxX + 3, boxWidth - 6)
+        } else {
+          renderFormattedContent(message.content, boxX + 3, boxWidth - 6)
+        }
+        
+        yPosition += 10
       })
 
       // Footer
       const footerY = pageHeight - 10
       pdf.setFontSize(8)
-      pdf.setTextColor(150, 150, 150)
+      pdf.setTextColor(156, 163, 175)
       pdf.text(`Exported from Finsync AI - ${new Date().toLocaleDateString()}`, pageWidth / 2, footerY, { align: 'center' })
 
       // Save PDF
