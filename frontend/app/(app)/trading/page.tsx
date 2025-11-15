@@ -425,9 +425,15 @@ export default function TradingPage() {
     }, 1000) // Increased debounce time
   }, [fetchTradingData])
 
-  // Calculate P&L from orders
-  const calculatedPnL = calculatePnLFromOrders(orders);
+  // Calculate P&L from orders (realized)
+  const realizedPnL = calculatePnLFromOrders(orders);
   const { totalProfit, totalLoss } = calculateProfitAndLoss(orders);
+  
+  // Calculate unrealized P&L from holdings
+  const unrealizedPnL = holdings.reduce((sum, h) => sum + (h.unrealizedPnL || 0), 0);
+  
+  // Total P&L = Realized + Unrealized
+  const calculatedPnL = realizedPnL + unrealizedPnL;
 
   if (isLoading && !accountData) {
     return (

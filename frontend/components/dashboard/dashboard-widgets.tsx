@@ -572,6 +572,15 @@ export function QuickActionsWidget() {
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
       
+      if (!token) {
+        toast({
+          title: "Error",
+          description: "Please login to export reports",
+          variant: "destructive",
+        })
+        return
+      }
+      
       // Fetch real dashboard data
       const response = await fetch('/api/v1/users/dashboard', {
         headers: {
@@ -586,12 +595,34 @@ export function QuickActionsWidget() {
       
       const dashboardData = await response.json()
       
-      // Use real data for export
+      // Properly format data for export
       const exportData = {
-        summary: dashboardData.data.summary,
-        transactions: dashboardData.data.recentTransactions || [],
-        budgets: dashboardData.data.activeBudgets || [],
-        goals: dashboardData.data.activeGoals || []
+        summary: {
+          totalIncome: dashboardData.data?.summary?.totalIncome || 0,
+          totalExpenses: dashboardData.data?.summary?.totalExpenses || 0,
+          netSavings: dashboardData.data?.summary?.netSavings || 0,
+          savingsRate: dashboardData.data?.summary?.savingsRate || 0,
+          portfolioValue: dashboardData.data?.summary?.portfolioValue || 0,
+        },
+        transactions: (dashboardData.data?.recentTransactions || []).map((t: any) => ({
+          date: t.date,
+          description: t.description,
+          category: t.category,
+          amount: t.amount,
+          type: t.type,
+        })),
+        budgets: (dashboardData.data?.activeBudgets || []).map((b: any) => ({
+          category: b.category,
+          budgetedAmount: b.totalAmount || b.amount || 0,
+          actualAmount: b.spent || 0,
+        })),
+        goals: (dashboardData.data?.activeGoals || []).map((g: any) => ({
+          name: g.name || g.title,
+          targetAmount: g.targetAmount || g.target || 0,
+          currentAmount: g.currentAmount || g.saved || 0,
+          progress: g.progress || 0,
+          targetDate: g.targetDate || g.deadline,
+        }))
       }
       
       exportFinancialReport(exportData)
@@ -601,6 +632,7 @@ export function QuickActionsWidget() {
         description: "Financial report exported successfully",
       })
     } catch (err) {
+      console.error('Export error:', err)
       toast({
         title: "Error",
         description: "Failed to export report. Please try again.",
