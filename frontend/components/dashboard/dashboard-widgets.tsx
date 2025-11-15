@@ -615,13 +615,6 @@ export function QuickActionsWidget() {
           category: b.category,
           budgetedAmount: b.totalAmount || b.amount || 0,
           actualAmount: b.spent || 0,
-        })),
-        goals: (dashboardData.data?.activeGoals || []).map((g: any) => ({
-          name: g.name || g.title,
-          targetAmount: g.targetAmount || g.target || 0,
-          currentAmount: g.currentAmount || g.saved || 0,
-          progress: g.progress || 0,
-          targetDate: g.targetDate || g.deadline,
         }))
       }
       

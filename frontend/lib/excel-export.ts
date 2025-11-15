@@ -158,7 +158,6 @@ export const exportFinancialReport = (data: {
   summary: any
   transactions: any[]
   budgets: any[]
-  goals: any[]
 }) => {
   const sheets = [
     {
@@ -189,16 +188,6 @@ export const exportFinancialReport = (data: {
         'Budgeted': ExcelExporter.formatCurrencyForExcel(budget.budgetedAmount),
         'Actual': ExcelExporter.formatCurrencyForExcel(budget.actualAmount),
         'Variance': ExcelExporter.formatCurrencyForExcel(budget.budgetedAmount - budget.actualAmount),
-      }))
-    },
-    {
-      name: 'Goals',
-      data: data.goals.map(goal => ({
-        'Goal': goal.name,
-        'Target Amount': ExcelExporter.formatCurrencyForExcel(goal.targetAmount),
-        'Current Amount': ExcelExporter.formatCurrencyForExcel(goal.currentAmount),
-        'Progress': `${goal.progress.toFixed(1)}%`,
-        'Target Date': ExcelExporter.formatDateForExcel(new Date(goal.targetDate)),
       }))
     }
   ]

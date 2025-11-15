@@ -5,7 +5,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { TrendingUp, TrendingDown, MoreHorizontal, RefreshCw } from "lucide-react"
+import { TrendingUp, TrendingDown, RefreshCw } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -14,13 +14,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { useRouter } from "next/navigation"
 
 interface Holding {
   symbol: string
@@ -47,22 +40,10 @@ export default function TradingPortfolio({
   isRefreshing = false,
   onRefresh
 }: TradingPortfolioProps) {
-  const router = useRouter()
   const [previousPrices, setPreviousPrices] = useState<Record<string, number>>({})
   const [priceChanges, setPriceChanges] = useState<Record<string, 'up' | 'down' | 'same'>>({})
   const [localHoldings, setLocalHoldings] = useState<Holding[]>(holdings)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-
-  // Handle selling stock from portfolio
-  const handleSellStock = (holding: Holding) => {
-    // Navigate to trade tab with pre-filled sell order
-    router.push(`/trading?action=sell&symbol=${holding.symbol}&quantity=${holding.quantity}`)
-  }
-
-  // Handle viewing stock details
-  const handleViewDetails = (holding: Holding) => {
-    router.push(`/stocks/${holding.symbol}`)
-  }
 
   // Update local holdings when props change
   useEffect(() => {
@@ -197,7 +178,6 @@ export default function TradingPortfolio({
               <TableHead className="text-right">Market Value</TableHead>
               <TableHead className="text-right">P&L</TableHead>
               <TableHead className="text-right">P&L %</TableHead>
-              <TableHead></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -229,23 +209,6 @@ export default function TradingPortfolio({
                     isPositive ? 'text-green-600' : 'text-red-600'
                   }`}>
                     {formatPercentage(holding.pnlPercentage)}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleSellStock(holding)}>
-                          Sell Stock
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleViewDetails(holding)}>
-                          View Details
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               )
