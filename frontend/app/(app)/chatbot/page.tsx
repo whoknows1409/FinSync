@@ -228,12 +228,15 @@ export default function ChatbotPage() {
       }
 
       // Render formatted content matching frontend MessageRenderer
-      const renderFormattedContent = (content: string, boxX: number, maxWidth: number) => {
+      const renderFormattedContent = (content: string, boxX: number, maxWidth: number, isUserMessage: boolean = false) => {
         const lines = content.split('\n')
         let inCodeBlock = false
         let codeBlockLines: string[] = []
         let tableRows: string[][] = []
         let inTable = false
+        
+        // Set text color based on message type
+        const defaultTextColor = isUserMessage ? [255, 255, 255] : [55, 65, 81]
         
         for (let i = 0; i < lines.length; i++) {
           let line = sanitizeText(lines[i])
@@ -242,19 +245,19 @@ export default function ChatbotPage() {
           if (line.trim().startsWith('```')) {
             if (inCodeBlock) {
               // End code block - render it
-              checkPageBreak(codeBlockLines.length * 4 + 8)
+              checkPageBreak(codeBlockLines.length * 4.5 + 10)
               pdf.setFillColor(26, 32, 44) // Dark background like frontend
-              const blockHeight = codeBlockLines.length * 4 + 4
-              pdf.roundedRect(boxX, yPosition - 2, maxWidth, blockHeight, 1, 1, 'F')
+              const blockHeight = codeBlockLines.length * 4.5 + 6
+              pdf.roundedRect(boxX - 1, yPosition - 2, maxWidth + 2, blockHeight, 2, 2, 'F')
               
               pdf.setTextColor(229, 231, 235) // Light text
               pdf.setFont('courier', 'normal')
               pdf.setFontSize(8)
               codeBlockLines.forEach((codeLine) => {
-                pdf.text(codeLine, boxX + 2, yPosition)
-                yPosition += 4
+                pdf.text(codeLine.substring(0, 80), boxX + 3, yPosition + 1)
+                yPosition += 4.5
               })
-              yPosition += 4
+              yPosition += 6
               codeBlockLines = []
               inCodeBlock = false
               pdf.setFont('helvetica', 'normal')
@@ -280,42 +283,52 @@ export default function ChatbotPage() {
             const headers = tableRows[0]
             const body = tableRows.slice(2) // Skip separator row
             
-            checkPageBreak((body.length + 1) * 8 + 10)
+            checkPageBreak((body.length + 1) * 9 + 12)
             
             const cellWidth = maxWidth / headers.length
             
             // Header row with gray background
-            pdf.setFillColor(249, 250, 251)
-            pdf.rect(boxX, yPosition - 3, maxWidth, 7, 'F')
-            pdf.setDrawColor(229, 231, 235)
-            pdf.rect(boxX, yPosition - 3, maxWidth, 7, 'S')
+            pdf.setFillColor(243, 244, 246)
+            pdf.setDrawColor(209, 213, 219)
+            pdf.setLineWidth(0.2)
+            pdf.roundedRect(boxX - 1, yPosition - 3, maxWidth + 2, 8, 1, 1, 'FD')
             
             pdf.setFont('helvetica', 'bold')
             pdf.setFontSize(8)
-            pdf.setTextColor(107, 114, 128)
+            pdf.setTextColor(75, 85, 99)
             headers.forEach((header, idx) => {
               const cellX = boxX + (idx * cellWidth)
-              pdf.text(header.toUpperCase().substring(0, 20), cellX + 2, yPosition)
+              pdf.text(header.toUpperCase().substring(0, 18), cellX + 3, yPosition + 1)
             })
-            yPosition += 7
+            yPosition += 8
             
             // Body rows
             pdf.setFont('helvetica', 'normal')
             pdf.setFontSize(9)
-            pdf.setTextColor(55, 65, 81)
-            body.forEach((row) => {
-              checkPageBreak(7)
+            pdf.setTextColor(isUserMessage ? 255 : 55, isUserMessage ? 255 : 65, isUserMessage ? 255 : 81)
+            
+            body.forEach((row, rowIdx) => {
+              checkPageBreak(9)
+              
+              // Alternate row background for better readability
+              if (rowIdx % 2 === 0) {
+                pdf.setFillColor(255, 255, 255)
+              } else {
+                pdf.setFillColor(249, 250, 251)
+              }
+              
               pdf.setDrawColor(229, 231, 235)
-              pdf.rect(boxX, yPosition - 3, maxWidth, 7, 'S')
+              pdf.setLineWidth(0.1)
+              pdf.rect(boxX - 1, yPosition - 3, maxWidth + 2, 8, 'FD')
               
               row.forEach((cell, idx) => {
                 const cellX = boxX + (idx * cellWidth)
-                const cellText = cell.length > 22 ? cell.substring(0, 19) + '...' : cell
-                pdf.text(cellText, cellX + 2, yPosition)
+                const cellText = cell.length > 20 ? cell.substring(0, 17) + '...' : cell
+                pdf.text(cellText, cellX + 3, yPosition + 1)
               })
-              yPosition += 7
+              yPosition += 8
             })
-            yPosition += 4
+            yPosition += 5
             
             tableRows = []
             inTable = false
@@ -327,29 +340,35 @@ export default function ChatbotPage() {
           if (headerMatch) {
             const level = headerMatch[1].length
             const text = headerMatch[2]
-            const fontSize = level === 1 ? 16 : level === 2 ? 14 : 12
+            const fontSize = level === 1 ? 15 : level === 2 ? 13 : 11
             
-            checkPageBreak(fontSize + 6)
+            checkPageBreak(fontSize + 8)
             
             pdf.setFont('helvetica', 'bold')
             pdf.setFontSize(fontSize)
-            pdf.setTextColor(17, 24, 39) // Dark gray
             
-            const headerLines = pdf.splitTextToSize(text, maxWidth)
+            // Use white text for user messages, dark for AI
+            if (isUserMessage) {
+              pdf.setTextColor(255, 255, 255)
+            } else {
+              pdf.setTextColor(17, 24, 39)
+            }
+            
+            const headerLines = pdf.splitTextToSize(text, maxWidth - 4)
             headerLines.forEach((headerLine: string) => {
-              pdf.text(headerLine, boxX, yPosition)
-              yPosition += fontSize * 0.35
+              pdf.text(headerLine, boxX, yPosition + 1)
+              yPosition += fontSize * 0.4
             })
             
             // Border bottom for H1 (matching frontend)
             if (level === 1) {
-              yPosition += 2
-              pdf.setDrawColor(229, 231, 235)
-              pdf.setLineWidth(0.3)
-              pdf.line(boxX, yPosition, boxX + maxWidth, yPosition)
               yPosition += 3
-            } else {
+              pdf.setDrawColor(isUserMessage ? 255 : 229, isUserMessage ? 255 : 231, isUserMessage ? 255 : 235)
+              pdf.setLineWidth(0.3)
+              pdf.line(boxX, yPosition, boxX + maxWidth * 0.7, yPosition)
               yPosition += 4
+            } else {
+              yPosition += 5
             }
             
             pdf.setFont('helvetica', 'normal')
@@ -358,7 +377,7 @@ export default function ChatbotPage() {
 
           // Handle lists (matching frontend blue bullets)
           if (line.match(/^[\*\-]\s+/) || line.match(/^\d+\.\s+/)) {
-            checkPageBreak(7)
+            checkPageBreak(8)
             
             const isOrdered = line.match(/^\d+\.\s+/)
             const listText = isOrdered 
@@ -366,25 +385,30 @@ export default function ChatbotPage() {
               : line.replace(/^[\*\-]\s+/, '')
             
             pdf.setFontSize(10)
-            pdf.setTextColor(55, 65, 81)
+            pdf.setTextColor(...(defaultTextColor as [number, number, number]))
             
             if (!isOrdered) {
-              // Blue bullet point (matching frontend)
-              pdf.setFillColor(59, 130, 246)
-              pdf.circle(boxX + 3, yPosition - 1.5, 1, 'F')
+              // Blue bullet point (matching frontend) or white for user messages
+              if (isUserMessage) {
+                pdf.setFillColor(255, 255, 255)
+              } else {
+                pdf.setFillColor(59, 130, 246)
+              }
+              pdf.circle(boxX + 4, yPosition - 1.5, 1.2, 'F')
               
-              const textLines = pdf.splitTextToSize(listText, maxWidth - 10)
+              const textLines = pdf.splitTextToSize(listText, maxWidth - 12)
               textLines.forEach((textLine: string) => {
-                pdf.text(textLine, boxX + 8, yPosition)
-                yPosition += 5
+                pdf.text(textLine, boxX + 10, yPosition)
+                yPosition += 5.5
               })
             } else {
-              const textLines = pdf.splitTextToSize(listText, maxWidth - 5)
+              const textLines = pdf.splitTextToSize(listText, maxWidth - 8)
               textLines.forEach((textLine: string) => {
-                pdf.text(textLine, boxX + 5, yPosition)
-                yPosition += 5
+                pdf.text(textLine, boxX + 6, yPosition)
+                yPosition += 5.5
               })
             }
+            yPosition += 1
             continue
           }
 
@@ -400,23 +424,29 @@ export default function ChatbotPage() {
 
           // Handle blockquotes
           if (line.trim().startsWith('>')) {
-            checkPageBreak(8)
+            checkPageBreak(10)
             const quoteText = line.replace(/^>\s*/, '')
             
             // Left border (blue accent like frontend)
-            pdf.setDrawColor(59, 130, 246)
-            pdf.setLineWidth(1)
-            pdf.line(boxX, yPosition - 3, boxX, yPosition + 2)
+            if (isUserMessage) {
+              pdf.setDrawColor(255, 255, 255)
+              pdf.setFillColor(255, 255, 255)
+            } else {
+              pdf.setDrawColor(59, 130, 246)
+              pdf.setFillColor(59, 130, 246)
+            }
+            pdf.setLineWidth(1.5)
+            pdf.line(boxX + 1, yPosition - 3, boxX + 1, yPosition + 4)
             
             pdf.setFontSize(10)
-            pdf.setTextColor(107, 114, 128)
+            pdf.setTextColor(...(defaultTextColor as [number, number, number]))
             pdf.setFont('helvetica', 'italic')
-            const quoteLines = pdf.splitTextToSize(quoteText, maxWidth - 8)
+            const quoteLines = pdf.splitTextToSize(quoteText, maxWidth - 10)
             quoteLines.forEach((quoteLine: string) => {
-              pdf.text(quoteLine, boxX + 5, yPosition)
-              yPosition += 5
+              pdf.text(quoteLine, boxX + 7, yPosition)
+              yPosition += 5.5
             })
-            yPosition += 2
+            yPosition += 3
             pdf.setFont('helvetica', 'normal')
             continue
           }
@@ -432,17 +462,17 @@ export default function ChatbotPage() {
               .replace(/`([^`]+)`/g, '$1') // Inline code
             
             pdf.setFontSize(10)
-            pdf.setTextColor(55, 65, 81)
+            pdf.setTextColor(...(defaultTextColor as [number, number, number]))
             pdf.setFont('helvetica', 'normal')
             
-            const textLines = pdf.splitTextToSize(processedText, maxWidth)
+            const textLines = pdf.splitTextToSize(processedText, maxWidth - 2)
             textLines.forEach((textLine: string) => {
               pdf.text(textLine, boxX, yPosition)
-              yPosition += 5
+              yPosition += 5.5
             })
             yPosition += 2
           } else {
-            yPosition += 3 // Empty line spacing
+            yPosition += 4 // Empty line spacing
           }
         }
       }
@@ -473,42 +503,37 @@ export default function ChatbotPage() {
         pdf.setFontSize(10)
         pdf.setTextColor(isUser ? 59 : 107, isUser ? 130 : 114, isUser ? 246 : 128)
         pdf.text(isUser ? 'You' : 'Finsync AI', margin, yPosition)
-        yPosition += 7
+        yPosition += 8
         
         // Message box (matching frontend styling)
-        const boxX = margin + 2
-        const boxWidth = contentWidth - 4
+        const boxX = margin + 3
+        const boxWidth = contentWidth - 6
         const contentStartY = yPosition
         
-        // Render content first to calculate height
-        renderFormattedContent(message.content, boxX + 3, boxWidth - 6)
+        // First pass: render content to calculate height
+        const tempY = yPosition
+        renderFormattedContent(message.content, boxX + 4, boxWidth - 8, isUser)
+        const contentHeight = yPosition - tempY
         
         // Draw message box with proper colors
-        const boxHeight = yPosition - contentStartY + 4
+        const boxHeight = contentHeight + 8
         
         if (isUser) {
           pdf.setFillColor(59, 130, 246) // Blue for user (matching frontend)
-          pdf.setDrawColor(59, 130, 246)
+          pdf.setDrawColor(37, 99, 235) // Darker blue border
         } else {
           pdf.setFillColor(249, 250, 251) // Light gray for AI (matching frontend)
-          pdf.setDrawColor(229, 231, 235)
+          pdf.setDrawColor(229, 231, 235) // Light gray border
         }
         
-        pdf.setLineWidth(0.5)
-        pdf.roundedRect(boxX, contentStartY - 3, boxWidth, boxHeight, 3, 3, 'FD')
+        pdf.setLineWidth(0.3)
+        pdf.roundedRect(boxX, contentStartY - 4, boxWidth, boxHeight, 3, 3, 'FD')
         
-        // Re-render content on top of box
+        // Second pass: re-render content on top of box with proper positioning
         yPosition = contentStartY
+        renderFormattedContent(message.content, boxX + 4, boxWidth - 8, isUser)
         
-        // Change text color for user messages (white on blue)
-        if (isUser) {
-          const originalRender = renderFormattedContent
-          renderFormattedContent(message.content, boxX + 3, boxWidth - 6)
-        } else {
-          renderFormattedContent(message.content, boxX + 3, boxWidth - 6)
-        }
-        
-        yPosition += 10
+        yPosition += 12
       })
 
       // Footer
