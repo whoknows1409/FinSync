@@ -6,7 +6,6 @@ const Transaction = require('../models/Transaction');
 const Budget = require('../models/Budget');
 const FinancialGoal = require('../models/FinancialGoal');
 const ChatHistory = require('../models/ChatHistory');
-const TradingAccount = require('../models/TradingAccount');
 const RecurringTransaction = require('../models/RecurringTransaction');
 const mongoose = require('mongoose');
 
@@ -626,68 +625,6 @@ const getUserFinancialContext = async (userId) => {
     const avgProgress = goals.length > 0 ?
       goals.reduce((sum, g) => sum + g.progressPercentage, 0) / goals.length : 0;
 
-    // Get paper trading portfolio data (simplified, no external API calls)
-    let tradingData = {
-      hasAccount: false,
-      walletBalance: 0,
-      totalValue: 0,
-      totalPnL: 0,
-      holdingsCount: 0,
-      holdings: [],
-      pendingOrders: 0,
-      executedOrders: 0,
-      watchlistCount: 0,
-      tradingStats: {
-        totalTrades: 0,
-        successfulTrades: 0,
-        winRate: 0,
-        bestTrade: null,
-        worstTrade: null,
-      },
-    };
-
-    try {
-      const tradingAccount = await TradingAccount.findOne({ user: userId });
-      
-      if (tradingAccount) {
-        // Use only cached data, no external API calls or population
-        const unrealizedPnL = tradingAccount.holdings.reduce((sum, h) => sum + (h.unrealizedPnL || 0), 0);
-        
-        tradingData = {
-          hasAccount: true,
-          walletBalance: tradingAccount.walletBalance || 0,
-          totalValue: tradingAccount.totalValue || 0,
-          totalPnL: (tradingAccount.totalPnL || 0) + unrealizedPnL,
-          realizedPnL: tradingAccount.totalPnL || 0,
-          unrealizedPnL: unrealizedPnL,
-          holdingsCount: tradingAccount.holdings?.length || 0,
-          holdings: (tradingAccount.holdings || []).slice(0, 5).map(h => ({
-            symbol: h.symbol || 'N/A',
-            quantity: h.quantity || 0,
-            averagePrice: h.averagePrice || 0,
-            currentPrice: h.currentPrice || 0,
-            marketValue: h.marketValue || 0,
-            unrealizedPnL: h.unrealizedPnL || 0,
-            pnlPercentage: h.pnlPercentage || 0,
-          })),
-          pendingOrders: tradingAccount.orders?.filter(o => o.status === 'PENDING').length || 0,
-          executedOrders: tradingAccount.orders?.filter(o => o.status === 'EXECUTED').length || 0,
-          watchlistCount: tradingAccount.watchlist?.length || 0,
-          tradingStats: {
-            totalTrades: tradingAccount.tradingStats?.totalTrades || 0,
-            successfulTrades: tradingAccount.tradingStats?.successfulTrades || 0,
-            winRate: tradingAccount.tradingStats?.winRate || 0,
-            bestTrade: tradingAccount.tradingStats?.bestTrade || null,
-            worstTrade: tradingAccount.tradingStats?.worstTrade || null,
-            totalVolume: tradingAccount.tradingStats?.totalVolume || 0,
-          },
-        };
-      }
-    } catch (error) {
-      logger.warn('Could not fetch trading account data, skipping:', error.message);
-      // Continue with default empty trading data
-    }
-
     // Get recurring transactions (subscriptions, bills, etc.)
     let recurringData = {
       count: 0,
@@ -770,7 +707,6 @@ const getUserFinancialContext = async (userId) => {
         avgProgress: Math.round(avgProgress),
       },
       recurring: recurringData,
-      trading: tradingData,
       historicalData: {
         allTime: {
           income: allFinancials.income,
@@ -807,18 +743,6 @@ const getUserFinancialContext = async (userId) => {
         totalMonthlyIncome: 0,
         expenses: [],
         income: [],
-      },
-      trading: {
-        hasAccount: false,
-        walletBalance: 0,
-        totalValue: 0,
-        totalPnL: 0,
-        holdingsCount: 0,
-        holdings: [],
-        pendingOrders: 0,
-        executedOrders: 0,
-        watchlistCount: 0,
-        tradingStats: { totalTrades: 0, successfulTrades: 0, winRate: 0, bestTrade: null, worstTrade: null },
       },
       historicalData: {
         allTime: { income: 0, expenses: 0 },
@@ -877,22 +801,6 @@ const enhanceMessageWithContext = (message, context) => {
       return `${message}\n\nMy recurring transactions: Total monthly recurring expenses ₹${context.recurring.totalMonthlyExpenses.toLocaleString()}, monthly recurring income ₹${context.recurring.totalMonthlyIncome.toLocaleString()}. I have ${context.recurring.activeCount} active recurring transactions${topExpenses ? `: ${topExpenses}` : ''}.`;
     } else {
       return `${message}\n\nNote: I don't have any recurring transactions set up yet.`;
-    }
-  }
-  
-  // Add trading/portfolio context for investment and stock queries
-  if (lowerMessage.includes('stock') || lowerMessage.includes('invest') || lowerMessage.includes('trade') || 
-      lowerMessage.includes('portfolio') || lowerMessage.includes('holding') || lowerMessage.includes('share')) {
-    if (context.trading.hasAccount) {
-      const topHoldings = context.trading.holdings
-        .sort((a, b) => b.marketValue - a.marketValue)
-        .slice(0, 3)
-        .map(h => `${h.symbol} (₹${h.marketValue.toLocaleString()}, P&L: ${h.pnlPercentage.toFixed(2)}%)`)
-        .join(', ');
-      
-      return `${message}\n\nMy paper trading portfolio: Wallet balance ₹${context.trading.walletBalance.toLocaleString()}, Total value ₹${context.trading.totalValue.toLocaleString()}, Total P&L ₹${context.trading.totalPnL.toLocaleString()} (Realized: ₹${context.trading.realizedPnL.toLocaleString()}, Unrealized: ₹${context.trading.unrealizedPnL.toLocaleString()}). I have ${context.trading.holdingsCount} holdings${topHoldings ? `: ${topHoldings}` : ''}. Trading stats: ${context.trading.tradingStats.totalTrades} trades, ${context.trading.tradingStats.winRate.toFixed(1)}% win rate${context.trading.tradingStats.bestTrade ? `, best trade: ${context.trading.tradingStats.bestTrade.symbol} (₹${context.trading.tradingStats.bestTrade.pnl.toLocaleString()})` : ''}.`;
-    } else {
-      return `${message}\n\nNote: I don't have a paper trading account yet.`;
     }
   }
   
