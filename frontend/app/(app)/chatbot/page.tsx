@@ -184,7 +184,7 @@ export default function ChatbotPage() {
 
   const insights = generateInsights()
 
-  // Export functionality - Direct PDF export
+  // Export functionality - Direct PDF export with formatting
   const exportToPDF = async () => {
     if (!selectedChat || !selectedChat.messages.length) {
       alert("No messages to export")
@@ -216,13 +216,132 @@ export default function ChatbotPage() {
         return false
       }
 
-      // Helper function to wrap text
-      const wrapText = (text: string, maxWidth: number) => {
-        return pdf.splitTextToSize(text, maxWidth)
+      // Helper function to sanitize text for PDF (fix rupee symbol and other special chars)
+      const sanitizeText = (text: string) => {
+        return text
+          .replace(/₹/g, 'Rs. ') // Replace rupee symbol with Rs.
+          .replace(/\u20B9/g, 'Rs. ') // Replace Unicode rupee
+          .replace(/[^\x00-\x7F]/g, (char) => { // Handle other non-ASCII chars
+            const code = char.charCodeAt(0)
+            if (code === 8377) return 'Rs. ' // Another rupee encoding
+            return char // Keep other Unicode chars
+          })
+      }
+
+      // Helper function to parse and render formatted content
+      const renderFormattedContent = (content: string, boxX: number, maxWidth: number) => {
+        const lines = content.split('\n')
+        
+        for (let i = 0; i < lines.length; i++) {
+          let line = sanitizeText(lines[i])
+          
+          // Check for headers
+          if (line.match(/^#{1,3}\s+/)) {
+            checkPageBreak(12)
+            const headerText = line.replace(/^#{1,3}\s+/, '')
+            const level = (line.match(/^(#{1,3})/)?.[0].length || 1)
+            const fontSize = level === 1 ? 14 : level === 2 ? 12 : 11
+            
+            pdf.setFont('helvetica', 'bold')
+            pdf.setFontSize(fontSize)
+            pdf.setTextColor(40, 40, 40)
+            const headerLines = pdf.splitTextToSize(headerText, maxWidth)
+            headerLines.forEach((headerLine: string) => {
+              pdf.text(headerLine, boxX, yPosition)
+              yPosition += fontSize * 0.4
+            })
+            yPosition += 4
+            
+            // Underline for H1
+            if (level === 1) {
+              pdf.setDrawColor(200, 200, 200)
+              pdf.line(boxX, yPosition - 2, boxX + maxWidth * 0.5, yPosition - 2)
+              yPosition += 2
+            }
+            
+            pdf.setFont('helvetica', 'normal')
+            continue
+          }
+          
+          // Check for lists
+          if (line.match(/^[\*\-]\s+/) || line.match(/^\d+\.\s+/)) {
+            checkPageBreak(8)
+            const listText = line.replace(/^[\*\-]\s+/, '• ').replace(/^\d+\.\s+/, (match) => match)
+            pdf.setFontSize(10)
+            pdf.setTextColor(60, 60, 60)
+            const listLines = pdf.splitTextToSize(listText, maxWidth - 5)
+            listLines.forEach((listLine: string) => {
+              pdf.text(listLine, boxX + 3, yPosition)
+              yPosition += 5
+            })
+            continue
+          }
+          
+          // Check for table rows
+          if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+            if (line.match(/^\|[\s\-:]+\|$/)) continue // Skip separator
+            
+            checkPageBreak(8)
+            const cells = line.split('|').slice(1, -1).map(cell => sanitizeText(cell.trim()))
+            const cellWidth = maxWidth / cells.length
+            
+            pdf.setFontSize(9)
+            pdf.setTextColor(40, 40, 40)
+            pdf.setFont('helvetica', 'normal')
+            
+            cells.forEach((cell, index) => {
+              const cellX = boxX + (index * cellWidth)
+              const cellText = cell.length > 25 ? cell.substring(0, 22) + '...' : cell
+              pdf.text(cellText, cellX + 1, yPosition)
+            })
+            
+            // Draw table borders
+            pdf.setDrawColor(200, 200, 200)
+            pdf.setLineWidth(0.1)
+            cells.forEach((_, index) => {
+              const cellX = boxX + (index * cellWidth)
+              pdf.rect(cellX, yPosition - 4, cellWidth, 6)
+            })
+            yPosition += 7
+            continue
+          }
+          
+          // Check for horizontal rules
+          if (line.match(/^-{3,}$/)) {
+            checkPageBreak(4)
+            pdf.setDrawColor(200, 200, 200)
+            pdf.line(boxX, yPosition, boxX + maxWidth, yPosition)
+            yPosition += 4
+            continue
+          }
+          
+          // Regular text with inline formatting
+          if (line.trim() !== '') {
+            checkPageBreak(8)
+            
+            // Remove markdown formatting for PDF
+            let processedText = line
+              .replace(/\*\*([^*]+)\*\*/g, '$1') // Bold
+              .replace(/\*([^*]+)\*/g, '$1') // Italic
+              .replace(/`([^`]+)`/g, '$1') // Inline code
+            
+            pdf.setFontSize(10)
+            pdf.setTextColor(60, 60, 60)
+            pdf.setFont('helvetica', 'normal')
+            const textLines = pdf.splitTextToSize(processedText, maxWidth)
+            textLines.forEach((textLine: string) => {
+              pdf.text(textLine, boxX, yPosition)
+              yPosition += 5
+            })
+            yPosition += 2
+          } else {
+            yPosition += 3 // Empty line spacing
+          }
+        }
       }
 
       // Header
-      pdf.setFillColor(59, 130, 246) // Blue
+      pdf.setFillColor(59, 130, 246)
       pdf.rect(0, 0, pageWidth, 25, 'F')
       
       pdf.setTextColor(255, 255, 255)
@@ -240,42 +359,35 @@ export default function ChatbotPage() {
       selectedChat.messages.forEach((message) => {
         const isUser = message.role === 'user'
         
-        // Check if we need a new page
         checkPageBreak(20)
         
         // Message role label
         pdf.setFont('helvetica', 'bold')
-        pdf.setFontSize(10)
+        pdf.setFontSize(11)
         pdf.setTextColor(isUser ? 59 : 100, isUser ? 130 : 100, isUser ? 246 : 100)
         pdf.text(isUser ? 'You' : 'Finsync AI', margin, yPosition)
-        yPosition += 6
+        yPosition += 7
         
-        // Message content
-        const boxX = margin
-        const boxWidth = contentWidth - 20
+        // Message content box
+        const boxX = margin + 2
+        const boxWidth = contentWidth - 4
+        const contentStartY = yPosition
         
-        pdf.setTextColor(40, 40, 40)
-        pdf.setFont('helvetica', 'normal')
-        pdf.setFontSize(10)
+        // Render formatted content
+        renderFormattedContent(message.content, boxX + 2, boxWidth - 4)
         
-        const lines = wrapText(message.content, boxWidth)
-        const boxHeight = lines.length * 5 + 6
-        
-        // Check if content fits on page
-        checkPageBreak(boxHeight + 10)
-        
-        // Draw box
+        // Draw box around message
+        const boxHeight = yPosition - contentStartY + 2
         pdf.setDrawColor(isUser ? 59 : 220, isUser ? 130 : 220, isUser ? 246 : 220)
         pdf.setFillColor(isUser ? 240 : 249, isUser ? 248 : 250, isUser ? 255 : 251)
-        pdf.roundedRect(boxX, yPosition - 4, boxWidth + 6, boxHeight, 2, 2, 'FD')
+        pdf.setLineWidth(0.3)
+        pdf.roundedRect(boxX, contentStartY - 3, boxWidth, boxHeight, 2, 2, 'FD')
         
-        // Render text
-        lines.forEach((line: string) => {
-          pdf.text(line, boxX + 3, yPosition)
-          yPosition += 5
-        })
+        // Re-render content on top of box
+        yPosition = contentStartY
+        renderFormattedContent(message.content, boxX + 2, boxWidth - 4)
         
-        yPosition += 10
+        yPosition += 8
       })
 
       // Footer
