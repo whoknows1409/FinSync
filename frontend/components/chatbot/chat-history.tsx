@@ -202,7 +202,6 @@ export function ChatHistory({
 
   const handleDeleteChat = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    console.log('Deleting chat with id:', id)
     try {
       await chatbotAPI.deleteChatHistory(id)
       setChatHistory(prev => prev.filter(chat => {

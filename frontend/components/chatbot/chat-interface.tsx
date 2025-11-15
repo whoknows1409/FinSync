@@ -608,8 +608,6 @@ export function ChatInterface({
   }
 
   const handleNewChat = () => {
-    console.log('handleNewChat called')
-    
     // Clean up any existing typing interval
     if (typingIntervalRef.current) {
       clearInterval(typingIntervalRef.current)
@@ -634,8 +632,6 @@ export function ChatInterface({
     // Generate a new timestamp for the chat
     const newChatId = Date.now().toString()
     
-    console.log('Creating new chat with:', { newChatId, newMessages })
-    
     setMessages(newMessages)
     setChatId(newChatId)
     setPromptCount(0)
@@ -645,7 +641,6 @@ export function ChatInterface({
     
     // Notify parent component
     if (onNewChat) {
-      console.log('Calling onNewChat')
       onNewChat()
     }
   }
