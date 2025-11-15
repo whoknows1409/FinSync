@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Download, Share2, FileText, FileImage, MessageCircle, FileDown, Send, File } from "lucide-react"
 import { toast } from "sonner"
+import jsPDF from 'jspdf'
 
 interface ChatExportProps {
   messages: any[]
@@ -23,7 +24,7 @@ export function ChatExport({ messages, chatTitle = "Financial Chat" }: ChatExpor
   const [isExporting, setIsExporting] = useState(false)
   const [open, setOpen] = useState(false)
 
-  const exportToHTML = async () => {
+  const exportToPDF = async () => {
     if (!messages.length) {
       toast.error("No messages to export")
       return
@@ -33,210 +34,211 @@ export function ChatExport({ messages, chatTitle = "Financial Chat" }: ChatExpor
     setOpen(false)
     
     try {
-      // Create a simple HTML string for the export
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>${chatTitle}</title>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <style>
-            * {
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
-            }
-            
-            body {
-              font-family: Arial, sans-serif;
-              background-color: white;
-              color: #333;
-              line-height: 1.6;
-            }
-            
-            .container {
-              max-width: 800px;
-              margin: 0 auto;
-              padding: 20px;
-            }
-            
-            .header {
-              text-align: center;
-              margin-bottom: 30px;
-              padding-bottom: 20px;
-              border-bottom: 2px solid #3b82f6;
-            }
-            
-            .branding {
-              color: #3b82f6;
-              font-weight: bold;
-              font-size: 18px;
-              margin-bottom: 10px;
-            }
-            
-            .title {
-              font-size: 24px;
-              font-weight: bold;
-              margin-bottom: 5px;
-            }
-            
-            .message {
-              margin-bottom: 25px;
-              page-break-inside: avoid;
-            }
-            
-            .message.user {
-              text-align: right;
-            }
-            
-            .message.assistant {
-              text-align: left;
-            }
-            
-            .message-content {
-              display: inline-block;
-              padding: 12px 16px;
-              border-radius: 8px;
-              max-width: 70%;
-              text-align: left;
-              margin-top: 5px;
-            }
-            
-            .user .message-content {
-              background-color: #3b82f6;
-              color: white;
-            }
-            
-            .assistant .message-content {
-              background-color: #f1f5f9;
-              color: #333;
-              border: 1px solid #e2e8f0;
-            }
-            
-            .message-role {
-              font-size: 12px;
-              font-weight: bold;
-              margin-bottom: 5px;
-            }
-            
-            .user .message-role {
-              color: #3b82f6;
-            }
-            
-            .assistant .message-role {
-              color: #666;
-            }
-            
-            .footer {
-              text-align: center;
-              margin-top: 40px;
-              padding-top: 20px;
-              border-top: 1px solid #e2e8f0;
-              font-size: 12px;
-              color: #999;
-            }
-            
-            @media print {
-              body {
-                background-color: white;
-                color: #333;
-              }
-              
-              .container {
-                max-width: 100%;
-                margin: 0;
-                padding: 20px;
-              }
-              
-              /* Fix for user messages not showing in PDF */
-              .message.user {
-                text-align: right !important;
-              }
-              
-              .message.assistant {
-                text-align: left !important;
-              }
-              
-              .message-content {
-                max-width: 70% !important;
-                display: inline-block !important;
-              }
-              
-              .user .message-content {
-                background-color: #3b82f6 !important;
-                color: white !important;
-                border: 1px solid #3b82f6 !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-              }
-              
-              .assistant .message-content {
-                background-color: #f1f5f9 !important;
-                color: #333 !important;
-                border: 1px solid #e2e8f0 !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-              }
-              
-              .message-role {
-                color: #666 !important;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <div class="branding">Finsync</div>
-              <div class="title">${chatTitle}</div>
-            </div>
-            
-            <div class="messages">
-              ${messages.map((message, index) => `
-                <div class="message ${message.role}">
-                  <div class="message-role">${message.role === 'user' ? 'You' : 'Finsync AI'}</div>
-                  <div class="message-content">
-                    ${message.content.replace(/\n/g, '<br>')}
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-            
-            <div class="footer">
-              This chat was exported from Finsync AI
-            </div>
-          </div>
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      })
+
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      const margin = 15
+      const contentWidth = pageWidth - (margin * 2)
+      let yPosition = margin
+
+      // Helper function to add new page if needed
+      const checkPageBreak = (requiredSpace: number) => {
+        if (yPosition + requiredSpace > pageHeight - margin) {
+          pdf.addPage()
+          yPosition = margin
+          return true
+        }
+        return false
+      }
+
+      // Helper function to wrap text
+      const wrapText = (text: string, maxWidth: number, fontSize: number) => {
+        pdf.setFontSize(fontSize)
+        const lines = pdf.splitTextToSize(text, maxWidth)
+        return lines
+      }
+
+      // Helper function to parse and render markdown-like content
+      const renderFormattedText = (text: string, x: number, maxWidth: number, isUser: boolean) => {
+        const lines = text.split('\n')
+        let currentY = yPosition
+        
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i]
           
-          <script>
-            // Auto-print functionality
-            window.onload = function() {
-              if (window.confirm('Do you want to save this chat as a PDF? Click OK to print and save as PDF.')) {
-                window.print();
-              }
-            };
-          </script>
-        </body>
-        </html>
-      `
+          // Check for headers
+          if (line.match(/^#{1,3}\s+/)) {
+            checkPageBreak(15)
+            const headerText = line.replace(/^#{1,3}\s+/, '')
+            const level = (line.match(/^(#{1,3})/)?.[0].length || 1)
+            const fontSize = level === 1 ? 16 : level === 2 ? 14 : 12
+            
+            pdf.setFont('helvetica', 'bold')
+            pdf.setFontSize(fontSize)
+            pdf.setTextColor(40, 40, 40)
+            const headerLines = wrapText(headerText, maxWidth, fontSize)
+            headerLines.forEach((headerLine: string) => {
+              pdf.text(headerLine, x, currentY)
+              currentY += fontSize * 0.5
+            })
+            currentY += 3
+            
+            // Add underline for H1
+            if (level === 1) {
+              pdf.setDrawColor(200, 200, 200)
+              pdf.line(x, currentY, x + maxWidth, currentY)
+              currentY += 3
+            }
+            
+            pdf.setFont('helvetica', 'normal')
+            continue
+          }
+          
+          // Check for lists
+          if (line.match(/^[\*\-]\s+/) || line.match(/^\d+\.\s+/)) {
+            checkPageBreak(10)
+            const listText = line.replace(/^[\*\-]\s+/, '• ').replace(/^\d+\.\s+/, (match) => match)
+            pdf.setFontSize(10)
+            pdf.setTextColor(60, 60, 60)
+            const listLines = wrapText(listText, maxWidth - 5, 10)
+            listLines.forEach((listLine: string) => {
+              pdf.text(listLine, x + 5, currentY)
+              currentY += 5
+            })
+            continue
+          }
+          
+          // Check for table rows
+          if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+            // Skip separator rows
+            if (line.match(/^\|[\s\-:]+\|$/)) continue
+            
+            checkPageBreak(10)
+            const cells = line.split('|').slice(1, -1).map(cell => cell.trim())
+            const cellWidth = maxWidth / cells.length
+            
+            pdf.setFontSize(9)
+            pdf.setTextColor(40, 40, 40)
+            
+            cells.forEach((cell, index) => {
+              const cellX = x + (index * cellWidth)
+              pdf.text(cell.substring(0, 30), cellX + 2, currentY)
+            })
+            
+            // Draw table borders
+            pdf.setDrawColor(200, 200, 200)
+            pdf.rect(x, currentY - 4, maxWidth, 6)
+            currentY += 8
+            continue
+          }
+          
+          // Check for horizontal rules
+          if (line.match(/^-{3,}$/)) {
+            checkPageBreak(5)
+            pdf.setDrawColor(200, 200, 200)
+            pdf.line(x, currentY, x + maxWidth, currentY)
+            currentY += 5
+            continue
+          }
+          
+          // Regular paragraphs
+          if (line.trim() !== '') {
+            checkPageBreak(10)
+            
+            // Handle inline formatting
+            let processedText = line
+            // Remove markdown bold/italic markers for PDF
+            processedText = processedText.replace(/\*\*([^*]+)\*\*/g, '$1')
+            processedText = processedText.replace(/\*([^*]+)\*/g, '$1')
+            processedText = processedText.replace(/`([^`]+)`/g, '$1')
+            
+            pdf.setFontSize(10)
+            pdf.setTextColor(60, 60, 60)
+            const textLines = wrapText(processedText, maxWidth, 10)
+            textLines.forEach((textLine: string) => {
+              pdf.text(textLine, x, currentY)
+              currentY += 5
+            })
+            currentY += 2
+          } else {
+            currentY += 3
+          }
+        }
+        
+        yPosition = currentY
+      }
+
+      // Header
+      pdf.setFillColor(59, 130, 246) // Blue
+      pdf.rect(0, 0, pageWidth, 25, 'F')
       
-      // Create a blob from the HTML content
-      const blob = new Blob([htmlContent], { type: 'text/html' })
-      const url = URL.createObjectURL(blob)
+      pdf.setTextColor(255, 255, 255)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(20)
+      pdf.text('Finsync', pageWidth / 2, 12, { align: 'center' })
       
-      // Create a temporary link to download the HTML file
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${chatTitle.replace(/\s+/g, '_')}.html`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      pdf.setFontSize(12)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(chatTitle, pageWidth / 2, 19, { align: 'center' })
       
-      toast.success("Chat exported as HTML. When you open the file, you'll be prompted to save as PDF.")
+      yPosition = 35
+
+      // Messages
+      messages.forEach((message, index) => {
+        const isUser = message.role === 'user'
+        
+        // Check if we need a new page
+        checkPageBreak(20)
+        
+        // Message role label
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(10)
+        pdf.setTextColor(isUser ? 59 : 100, isUser ? 130 : 100, isUser ? 246 : 100)
+        pdf.text(isUser ? 'You' : 'Finsync AI', margin, yPosition)
+        yPosition += 6
+        
+        // Message content box
+        const boxX = isUser ? margin + 30 : margin
+        const boxWidth = isUser ? contentWidth - 30 : contentWidth - 30
+        
+        // Save position before content
+        const contentStartY = yPosition
+        
+        // Render formatted content
+        pdf.setTextColor(40, 40, 40)
+        pdf.setFont('helvetica', 'normal')
+        renderFormattedText(message.content, boxX, boxWidth, isUser)
+        
+        // Draw box around message (after we know the height)
+        const boxHeight = yPosition - contentStartY + 3
+        pdf.setDrawColor(isUser ? 59 : 220, isUser ? 130 : 220, isUser ? 246 : 220)
+        pdf.setFillColor(isUser ? 240 : 249, isUser ? 248 : 250, isUser ? 255 : 251)
+        pdf.roundedRect(boxX - 3, contentStartY - 4, boxWidth + 6, boxHeight, 2, 2, 'FD')
+        
+        // Re-render content on top of box
+        yPosition = contentStartY
+        renderFormattedText(message.content, boxX, boxWidth, isUser)
+        
+        yPosition += 8
+      })
+
+      // Footer
+      const footerY = pageHeight - 10
+      pdf.setFontSize(8)
+      pdf.setTextColor(150, 150, 150)
+      pdf.text(`Exported from Finsync AI - ${new Date().toLocaleDateString()}`, pageWidth / 2, footerY, { align: 'center' })
+
+      // Save PDF
+      pdf.save(`${chatTitle.replace(/\s+/g, '_')}.pdf`)
+      toast.success("Chat exported to PDF successfully")
     } catch (error) {
-      console.error("Error exporting to HTML:", error)
-      toast.error("Failed to export chat")
+      console.error("Error exporting to PDF:", error)
+      toast.error("Failed to export chat to PDF")
     } finally {
       setIsExporting(false)
     }
@@ -353,17 +355,17 @@ export function ChatExport({ messages, chatTitle = "Financial Chat" }: ChatExpor
             <Button 
               variant="ghost" 
               className="w-full justify-start h-auto p-0"
-              onClick={exportToHTML}
+              onClick={exportToPDF}
               disabled={isExporting}
             >
               <div className="flex items-start gap-3 w-full">
-                <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg flex-shrink-0">
-                  <FileImage className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg shrink-0">
+                  <FileDown className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="text-left min-w-0">
-                  <div className="font-medium truncate">Export as HTML</div>
+                  <div className="font-medium truncate">Export as PDF</div>
                   <div className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                    Save as a styled HTML file that can be printed to PDF
+                    Download a formatted PDF with your entire conversation
                   </div>
                 </div>
               </div>
@@ -378,7 +380,7 @@ export function ChatExport({ messages, chatTitle = "Financial Chat" }: ChatExpor
               disabled={isExporting}
             >
               <div className="flex items-start gap-3 w-full">
-                <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded-lg flex-shrink-0">
+                <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded-lg shrink-0">
                   <FileText className="h-5 w-5 text-green-600 dark:text-green-400" />
                 </div>
                 <div className="text-left min-w-0">
@@ -399,7 +401,7 @@ export function ChatExport({ messages, chatTitle = "Financial Chat" }: ChatExpor
               disabled={isExporting}
             >
               <div className="flex items-start gap-3 w-full">
-                <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-lg flex-shrink-0">
+                <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-lg shrink-0">
                   <MessageCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                 </div>
                 <div className="text-left min-w-0">
