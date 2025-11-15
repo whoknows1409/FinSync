@@ -6,8 +6,9 @@ import { ChatHistory } from "@/components/chatbot/chat-history"
 import { ChatInsights } from "@/components/chatbot/chat-insights"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Lightbulb, TrendingUp, Clock, MessageSquare, FileText, Share2, Download } from "lucide-react"
+import { Lightbulb, TrendingUp, Clock, MessageSquare, FileText, Share2, Download, FileDown } from "lucide-react"
 import { chatbotAPI } from "@/lib/api-service"
+import jsPDF from 'jspdf'
 
 interface ChatHistoryItem {
   _id: string
@@ -183,8 +184,8 @@ export default function ChatbotPage() {
 
   const insights = generateInsights()
 
-  // Export functionality - updated to remove timestamps and dates
-  const exportToHTML = async () => {
+  // Export functionality - Direct PDF export
+  const exportToPDF = async () => {
     if (!selectedChat || !selectedChat.messages.length) {
       alert("No messages to export")
       return
@@ -193,443 +194,102 @@ export default function ChatbotPage() {
     setIsExporting(true)
     
     try {
-      // Create a PDF-optimized HTML string for the export
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>${selectedChat.title}</title>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <style>
-            * {
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
-            }
-            
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-              background-color: #f8fafc;
-              min-height: 100vh;
-              padding: 20px;
-              color: #334155;
-            }
-            
-            .container {
-              max-width: 900px;
-              margin: 0 auto;
-              background: white;
-              border-radius: 16px;
-              box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-              overflow: hidden;
-            }
-            
-            .header {
-              background-color: #ffffff;
-              color: #1e293b;
-              padding: 30px;
-              text-align: center;
-              border-bottom: 1px solid #e2e8f0;
-              position: relative;
-            }
-            
-            .branding {
-              position: absolute;
-              top: 20px;
-              left: 20px;
-              display: flex;
-              align-items: center;
-              color: #3b82f6;
-              font-weight: 600;
-              font-size: 14px;
-            }
-            
-            .logo {
-              width: 28px;
-              height: 28px;
-              background-color: #3b82f6;
-              color: white;
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-weight: bold;
-              margin-right: 8px;
-              font-size: 16px;
-            }
-            
-            .title {
-              font-size: 26px;
-              font-weight: 700;
-              margin-bottom: 8px;
-              color: #0f172a;
-            }
-            
-            .chat-container {
-              padding: 30px;
-              background-color: #ffffff;
-            }
-            
-            .message {
-              display: flex;
-              margin-bottom: 24px;
-              page-break-inside: avoid;
-            }
-            
-            .message.user {
-              justify-content: flex-end;
-            }
-            
-            .message.assistant {
-              justify-content: flex-start;
-            }
-            
-            .message-content {
-              max-width: 70%;
-              padding: 14px 18px;
-              border-radius: 16px;
-              position: relative;
-              box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-            }
-            
-            .user .message-content {
-              background-color: #3b82f6;
-              color: white;
-              border-bottom-right-radius: 4px;
-            }
-            
-            .assistant .message-content {
-              background-color: #f1f5f9;
-              color: #334155;
-              border-bottom-left-radius: 4px;
-              border: 1px solid #e2e8f0;
-            }
-            
-            .message-role {
-              font-size: 12px;
-              font-weight: 600;
-              margin-bottom: 6px;
-            }
-            
-            .user .message-role {
-              color: rgba(255, 255, 255, 0.9);
-            }
-            
-            .assistant .message-role {
-              color: #64748b;
-            }
-            
-            .message-text {
-              font-size: 15px;
-              line-height: 1.5;
-              word-wrap: break-word;
-            }
-            
-            .avatar {
-              width: 36px;
-              height: 36px;
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-weight: 600;
-              font-size: 14px;
-              margin: 0 12px;
-              flex-shrink: 0;
-            }
-            
-            .user .avatar {
-              background-color: #3b82f6;
-              color: white;
-              order: 2;
-            }
-            
-            .assistant .avatar {
-              background-color: #e2e8f0;
-              color: #64748b;
-              order: 0;
-            }
-            
-            .footer {
-              text-align: center;
-              padding: 20px;
-              background-color: #f8fafc;
-              border-top: 1px solid #e2e8f0;
-              font-size: 12px;
-              color: #94a3b8;
-            }
-            
-            @media (max-width: 768px) {
-              .message-content {
-                max-width: 85%;
-              }
-              
-              .container {
-                margin: 10px;
-                border-radius: 12px;
-              }
-              
-              .header {
-                padding: 20px;
-              }
-              
-              .branding {
-                top: 15px;
-                left: 15px;
-              }
-              
-              .logo {
-                width: 24px;
-                height: 24px;
-                font-size: 14px;
-              }
-              
-              .title {
-                font-size: 22px;
-              }
-              
-              .chat-container {
-                padding: 20px;
-              }
-            }
-            
-            /* PDF-specific optimizations */
-            @media print {
-              /* Remove default browser header and footer */
-              @page {
-                size: auto;
-                margin: 10mm;
-              }
-              
-              body {
-                background-color: white;
-                padding: 0;
-                color: #334155;
-                margin: 0;
-              }
-              
-              .container {
-                box-shadow: none;
-                border-radius: 0;
-                max-width: 100%;
-                margin: 0;
-                border: none;
-                width: 100%;
-              }
-              
-              .header {
-                background-color: #f8fafc !important;
-                color: #0f172a !important;
-                border-bottom: 1px solid #e2e8f0 !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-                position: relative;
-                top: auto;
-                left: auto;
-                right: auto;
-                width: 100%;
-                z-index: 1;
-                padding: 20px 30px;
-              }
-              
-              .branding {
-                color: #3b82f6 !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-                position: relative;
-                top: auto;
-                left: auto;
-              }
-              
-              .logo {
-                background-color: #3b82f6 !important;
-                color: white !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-              }
-              
-              .title {
-                color: #0f172a !important;
-              }
-              
-              .chat-container {
-                padding: 30px;
-                background-color: white !important;
-              }
-              
-              /* Fix for user messages not showing in PDF */
-              .message {
-                display: flex !important;
-                margin-bottom: 24px !important;
-                page-break-inside: avoid;
-                width: 100%;
-              }
-              
-              .message.user {
-                justify-content: flex-end !important;
-              }
-              
-              .message.assistant {
-                justify-content: flex-start !important;
-              }
-              
-              .message-content {
-                max-width: 70% !important;
-                padding: 14px 18px !important;
-                border-radius: 16px !important;
-                position: relative !important;
-                display: inline-block !important;
-              }
-              
-              .user .message-content {
-                background-color: #3b82f6 !important;
-                color: white !important;
-                border-bottom-right-radius: 4px !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-              }
-              
-              .assistant .message-content {
-                background-color: #f1f5f9 !important;
-                color: #334155 !important;
-                border-bottom-left-radius: 4px !important;
-                border: 1px solid #e2e8f0 !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-              }
-              
-              .message-role {
-                font-size: 12px !important;
-                font-weight: 600 !important;
-                margin-bottom: 6px !important;
-              }
-              
-              .user .message-role {
-                color: rgba(255, 255, 255, 0.9) !important;
-              }
-              
-              .assistant .message-role {
-                color: #64748b !important;
-              }
-              
-              .message-text {
-                font-size: 15px !important;
-                line-height: 1.5 !important;
-                word-wrap: break-word !important;
-              }
-              
-              .avatar {
-                width: 36px !important;
-                height: 36px !important;
-                border-radius: 50% !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                font-weight: 600 !important;
-                font-size: 14px !important;
-                margin: 0 12px !important;
-                flex-shrink: 0 !important;
-              }
-              
-              .user .avatar {
-                background-color: #3b82f6 !important;
-                color: white !important;
-                order: 2 !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-              }
-              
-              .assistant .avatar {
-                background-color: #e2e8f0 !important;
-                color: #64748b !important;
-                order: 0 !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-              }
-              
-              .footer {
-                background-color: #f8fafc !important;
-                color: #94a3b8 !important;
-                border-top: 1px solid #e2e8f0 !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-                position: relative;
-                bottom: auto;
-                left: auto;
-                right: auto;
-                width: 100%;
-                z-index: 1;
-              }
-              
-              /* Ensure text doesn't get cut off between pages */
-              .message {
-                page-break-inside: avoid;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <div class="branding">
-                <div class="logo">F</div>
-                <span>Finsync</span>
-              </div>
-              <div class="title-area">
-                <div class="title">${selectedChat.title}</div>
-              </div>
-            </div>
-            
-            <div class="chat-container">
-              ${selectedChat.messages.map((message, index) => `
-                <div class="message ${message.role}">
-                  ${message.role === 'user' ? 
-                    `<div class="avatar">U</div>` : 
-                    `<div class="avatar">AI</div>`
-                  }
-                  <div class="message-content">
-                    <div class="message-role">${message.role === 'user' ? 'You' : 'Finsync AI'}</div>
-                    <div class="message-text">${message.content.replace(/\n/g, '<br>')}</div>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-            
-            <div class="footer">
-              This chat was exported from Finsync AI
-            </div>
-          </div>
-          
-          <script>
-            // Auto-print functionality
-            window.onload = function() {
-              if (window.confirm('Do you want to save this chat as a PDF? Click OK to print and save as PDF.')) {
-                window.print();
-              }
-            };
-          </script>
-        </body>
-        </html>
-      `
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      })
+
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      const margin = 15
+      const contentWidth = pageWidth - (margin * 2)
+      let yPosition = margin
+
+      // Helper function to check if we need a new page
+      const checkPageBreak = (requiredSpace: number) => {
+        if (yPosition + requiredSpace > pageHeight - margin) {
+          pdf.addPage()
+          yPosition = margin
+          return true
+        }
+        return false
+      }
+
+      // Helper function to wrap text
+      const wrapText = (text: string, maxWidth: number) => {
+        return pdf.splitTextToSize(text, maxWidth)
+      }
+
+      // Header
+      pdf.setFillColor(59, 130, 246) // Blue
+      pdf.rect(0, 0, pageWidth, 25, 'F')
       
-      // Create a blob from the HTML content
-      const blob = new Blob([htmlContent], { type: 'text/html' })
-      const url = URL.createObjectURL(blob)
+      pdf.setTextColor(255, 255, 255)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(20)
+      pdf.text('Finsync', pageWidth / 2, 12, { align: 'center' })
       
-      // Create a temporary link to download the HTML file
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${selectedChat.title.replace(/\s+/g, '_')}.html`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      pdf.setFontSize(12)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(selectedChat.title, pageWidth / 2, 19, { align: 'center' })
       
-      alert("Chat exported as HTML. When you open the file, you'll be prompted to save as PDF.")
+      yPosition = 35
+
+      // Messages
+      selectedChat.messages.forEach((message) => {
+        const isUser = message.role === 'user'
+        
+        // Check if we need a new page
+        checkPageBreak(20)
+        
+        // Message role label
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(10)
+        pdf.setTextColor(isUser ? 59 : 100, isUser ? 130 : 100, isUser ? 246 : 100)
+        pdf.text(isUser ? 'You' : 'Finsync AI', margin, yPosition)
+        yPosition += 6
+        
+        // Message content
+        const boxX = margin
+        const boxWidth = contentWidth - 20
+        
+        pdf.setTextColor(40, 40, 40)
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(10)
+        
+        const lines = wrapText(message.content, boxWidth)
+        const boxHeight = lines.length * 5 + 6
+        
+        // Check if content fits on page
+        checkPageBreak(boxHeight + 10)
+        
+        // Draw box
+        pdf.setDrawColor(isUser ? 59 : 220, isUser ? 130 : 220, isUser ? 246 : 220)
+        pdf.setFillColor(isUser ? 240 : 249, isUser ? 248 : 250, isUser ? 255 : 251)
+        pdf.roundedRect(boxX, yPosition - 4, boxWidth + 6, boxHeight, 2, 2, 'FD')
+        
+        // Render text
+        lines.forEach((line: string) => {
+          pdf.text(line, boxX + 3, yPosition)
+          yPosition += 5
+        })
+        
+        yPosition += 10
+      })
+
+      // Footer
+      const footerY = pageHeight - 10
+      pdf.setFontSize(8)
+      pdf.setTextColor(150, 150, 150)
+      pdf.text(`Exported from Finsync AI - ${new Date().toLocaleDateString()}`, pageWidth / 2, footerY, { align: 'center' })
+
+      // Save PDF
+      pdf.save(`${selectedChat.title.replace(/\s+/g, '_')}.pdf`)
+      alert("Chat exported to PDF successfully")
     } catch (error) {
-      console.error("Error exporting to HTML:", error)
-      alert("Failed to export chat")
+      console.error("Error exporting to PDF:", error)
+      alert("Failed to export chat to PDF")
     } finally {
       setIsExporting(false)
     }
@@ -800,11 +460,11 @@ export default function ChatbotPage() {
                       variant="outline" 
                       size="sm" 
                       className="w-full justify-start"
-                      onClick={exportToHTML}
+                      onClick={exportToPDF}
                       disabled={isExporting}
                     >
-                      <FileText className="h-4 w-4 mr-2" />
-                      Export as HTML
+                      <FileDown className="h-4 w-4 mr-2" />
+                      Export as PDF
                     </Button>
                     <Button 
                       variant="outline" 
