@@ -31,7 +31,7 @@ try {
 // @access  Private
 const sendMessage = async (req, res) => {
   try {
-    const { message, conversationHistory = [] } = req.body;
+    const { message, conversationHistory = [], options = {} } = req.body;
 
     if (!message || message.trim().length === 0) {
       return res.status(400).json({
@@ -46,19 +46,48 @@ const sendMessage = async (req, res) => {
     // Enhance the message with user context if relevant
     const enhancedMessage = enhanceMessageWithContext(message, userContext);
 
-    // Send to Gemini API
+    // Send to Gemini API with retry logic built-in
     const response = await geminiModule.sendMessage(enhancedMessage, conversationHistory);
+
+    // Generate title only on first user message if requested
+    let title = null;
+    if (options.generateTitle && conversationHistory.length <= 2) {
+      try {
+        // Generate title from the conversation
+        const messages = [
+          { role: 'user', content: message },
+          { role: 'assistant', content: response }
+        ];
+        const prompt = `Based on the following conversation, generate a concise title (4-5 words) that summarizes the main topic. The title should be related to finance, budgeting, investing, or financial planning. Only return the title, nothing else.\n\nConversation:\n${messages.map(msg => `${msg.role}: ${msg.content}`).join('\n')}`;
+        
+        title = await geminiModule.sendMessage(prompt, []);
+        
+        // Clean the title
+        title = title.trim().replace(/[\"'`]/g, '');
+        const words = title.split(' ');
+        if (words.length > 5) {
+          title = words.slice(0, 5).join(' ');
+        }
+      } catch (titleError) {
+        logger.error('Error generating title:', titleError);
+        // Fallback to first few words of message
+        const words = message.split(' ');
+        title = words.slice(0, 4).join(' ');
+      }
+    }
 
     logger.logBusiness('chatbot_query', {
       userId: req.user._id,
       messageLength: message.length,
       responseLength: response.length,
+      titleGenerated: !!title,
     });
 
     res.json({
       success: true,
       data: {
         response,
+        title,
         timestamp: new Date().toISOString(),
       },
     });
@@ -66,17 +95,24 @@ const sendMessage = async (req, res) => {
     logger.logError(error, req);
     
     // Handle specific Gemini API errors
-    if (error.message.includes('Rate limit')) {
+    if (error.message.includes('Rate limit') || error.message.includes('429')) {
       return res.status(429).json({
         success: false,
-        message: 'Too many requests. Please try again later.',
+        message: 'Too many requests. Please try again in a moment.',
+      });
+    }
+    
+    if (error.message.includes('503') || error.message.includes('Service unavailable')) {
+      return res.status(503).json({
+        success: false,
+        message: 'AI service temporarily unavailable. Please try again.',
       });
     }
     
     if (error.message.includes('API key')) {
       return res.status(500).json({
         success: false,
-        message: 'AI service temporarily unavailable. Please try again later.',
+        message: 'AI service configuration error. Please contact support.',
       });
     }
 

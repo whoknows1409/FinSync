@@ -123,10 +123,11 @@ class GeminiAPI {
         retryAttempt: retryAttempt,
       });
       
-      // Handle rate limit errors with exponential backoff
-      if (error.response?.status === 429 && retryAttempt < maxRetries) {
+      // Handle rate limit and service unavailable errors with exponential backoff
+      if ((error.response?.status === 429 || error.response?.status === 503) && retryAttempt < maxRetries) {
         const retryDelay = baseDelay * Math.pow(2, retryAttempt) + Math.random() * 1000; // Add jitter
-        logger.info(`Rate limit exceeded. Retrying after ${Math.round(retryDelay / 1000)} seconds...`);
+        const errorType = error.response?.status === 429 ? 'Rate limit exceeded' : 'Service unavailable (503)';
+        logger.info(`${errorType}. Retrying after ${Math.round(retryDelay / 1000)} seconds...`);
         await new Promise(resolve => setTimeout(resolve, retryDelay));
         return this.makeRequest(messages, options, retryAttempt + 1);
       } else if (error.response?.status === 429) {

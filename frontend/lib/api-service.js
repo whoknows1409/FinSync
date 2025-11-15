@@ -348,9 +348,9 @@ export const tradingAPI = {
 
 // Chatbot API
 export const chatbotAPI = {
-  sendMessage: (message, conversationHistory = []) => apiRequest('/v1/chatbot/query', {
+  sendMessage: (message, conversationHistory = [], options = {}) => apiRequest('/v1/chatbot/query', {
     method: 'POST',
-    body: JSON.stringify({ message, conversationHistory })
+    body: JSON.stringify({ message, conversationHistory, options })
   }),
   
   saveChatHistory: (chatData) => apiRequest('/v1/chatbot/save-chat', {

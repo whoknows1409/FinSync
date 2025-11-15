@@ -1,10 +1,10 @@
 // Gemini API Integration for Finsync
-// This file handles all Gemini API interactions for the AI chatbot
+// This file handles all Gemini API interactions for the AI chatbot via backend proxy
 
-// Utility function to check if API key is configured
+// Utility function to check if backend is configured
 export const isGeminiConfigured = (): boolean => {
-  // Check environment variable only (system-managed API key)
-  return !!process.env.NEXT_PUBLIC_GEMINI_API_KEY
+  // Always return true - backend handles API key management
+  return true
 }
 
 export interface GeminiMessage {
@@ -31,123 +31,54 @@ export interface GeminiResponse {
 }
 
 export class GeminiAPI {
-  private apiKey: string
-  private baseUrl: string
+  private backendUrl: string
 
   constructor() {
-    // Use system-managed API key from environment variable only
-    this.apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-    const model = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash';
-    this.baseUrl = process.env.NEXT_PUBLIC_GEMINI_API_URL || `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent`;
+    // Use backend proxy - no API key on client side
+    this.backendUrl = '/api/v1/chatbot'
   }
 
-  private async makeRequest(
-    messages: GeminiMessage[], 
-    options: {
-      temperature?: number
-      topK?: number
-      topP?: number
-      maxOutputTokens?: number
-    } = {}
-  ): Promise<GeminiResponse> {
-    if (!this.apiKey) {
-      throw new Error('Gemini API key not configured. Please contact the system administrator.')
-    }
-
-    const {
-      temperature = 0.7,
-      topK = 40,
-      topP = 0.95,
-      maxOutputTokens = 1024
-    } = options;
-
-    try {
-      const response = await fetch(`${this.baseUrl}?key=${this.apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: messages,
-          generationConfig: {
-            temperature,
-            topK,
-            topP,
-            maxOutputTokens,
+  private async makeRequestWithRetry(
+    url: string,
+    body: any,
+    maxRetries: number = 3
+  ): Promise<Response> {
+    let lastError: Error | null = null
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
           },
-          safetySettings: [
-            {
-              category: 'HARM_CATEGORY_HARASSMENT',
-              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-            },
-            {
-              category: 'HARM_CATEGORY_HATE_SPEECH',
-              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-            },
-            {
-              category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-            },
-            {
-              category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-            },
-          ],
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        // If 404 (model not found), try fallbacks automatically
-        if (response.status === 404) {
-          const fallbacks = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro'];
-          for (const m of fallbacks) {
-            const url = `https://generativelanguage.googleapis.com/v1/models/${m}:generateContent?key=${this.apiKey}`;
-            const r2 = await fetch(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ contents: messages, generationConfig: { temperature: options.temperature ?? 0.7, topK: options.topK ?? 40, topP: options.topP ?? 0.95, maxOutputTokens: options.maxOutputTokens ?? 1024 } }),
-            });
-            if (r2.ok) {
-              const d2 = await r2.json();
-              return d2;
-            }
-          }
+          body: JSON.stringify(body),
+        })
+        
+        // If 503 (Service Unavailable) or 429 (Rate Limited), retry with exponential backoff
+        if (response.status === 503 || response.status === 429) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 10000) // Max 10 seconds
+          console.warn(`Attempt ${attempt + 1} failed with ${response.status}, retrying in ${delay}ms...`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          lastError = new Error(`Service unavailable (attempt ${attempt + 1}/${maxRetries})`)
+          continue
         }
-        throw new Error(`Gemini API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`)
-      }
-
-      const data = await response.json()
-      
-      // Check if the response has the expected structure
-      if (!data.candidates || !data.candidates.length) {
-        console.error('Invalid Gemini API response - no candidates:', data)
-        throw new Error('Invalid response structure from Gemini API')
-      }
-      
-      const candidate = data.candidates[0]
-      
-      if (!candidate.content) {
-        console.error('Invalid Gemini API response - no content:', data)
-        throw new Error('Invalid response structure from Gemini API')
-      }
-      
-      // Check if the response has parts - handle both structures
-      if (!candidate.content.parts || !candidate.content.parts.length) {
-        // Some API versions might return text directly
-        if (candidate.content.text) {
-          // Return data as-is, will be handled in calling code
-          return data
+        
+        return response
+      } catch (error) {
+        lastError = error as Error
+        if (attempt < maxRetries - 1) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 10000)
+          console.warn(`Attempt ${attempt + 1} failed, retrying in ${delay}ms...`, error)
+          await new Promise(resolve => setTimeout(resolve, delay))
         }
-        console.error('Invalid Gemini API response - no parts or text:', data)
-        throw new Error('Empty response from Gemini API')
       }
-      
-      return data
-    } catch (error) {
-      console.error('Gemini API Error:', error)
-      throw error
     }
+    
+    throw lastError || new Error('Request failed after multiple attempts')
   }
 
   async sendMessage(
@@ -155,215 +86,42 @@ export class GeminiAPI {
     conversationHistory: GeminiMessage[] = [],
     options: {
       temperature?: number
-      topK?: number
-      topP?: number
-      maxOutputTokens?: number
+      generateTitle?: boolean
+      isFirstMessage?: boolean
     } = {}
-  ): Promise<string> {
+  ): Promise<{ response: string; title?: string }> {
     try {
-      // Add system context for financial advice
-      const systemMessage: GeminiMessage = {
-        role: 'model',
-        parts: [{ text: 'You are Finsync AI, a helpful financial assistant. You provide advice on personal finance, budgeting, investing, and stock analysis. Always be professional, accurate, and helpful. If you don\'t know something, say so rather than guessing.' }]
-      }
-
-      // Create the conversation with system context
-      const messages: GeminiMessage[] = [
-        systemMessage,
-        ...conversationHistory,
+      const response = await this.makeRequestWithRetry(
+        `${this.backendUrl}/query`,
         {
-          role: 'user',
-          parts: [{ text: userMessage }]
+          message: userMessage,
+          conversationHistory,
+          options,
         }
-      ]
-
-      const response = await this.makeRequest(messages, options)
+      )
       
-      // Validate response structure
-      if (!response.candidates || !response.candidates.length) {
-        throw new Error('No candidates in Gemini API response')
-      }
-      
-      const candidate = response.candidates[0]
-      
-      if (!candidate.content) {
-        throw new Error('No content in Gemini API response')
-      }
-      
-      // Handle multiple response structures
-      if (candidate.content.parts && candidate.content.parts.length > 0) {
-        // Structure 1: parts array
-        return candidate.content.parts[0].text
-      } else if (candidate.content.text) {
-        // Structure 2: direct text field
-        return candidate.content.text
-      } else if (typeof candidate.content === 'string') {
-        // Structure 3: content is directly a string
-        return candidate.content
-      } else {
-        // Content has no text
-        console.error('Invalid Gemini API response - no text content:', {
-          content: candidate.content,
-          finishReason: candidate.finishReason,
-          fullResponse: response
-        })
-        throw new Error('No text content in Gemini API response')
-      }
-    } catch (error) {
-      console.error('Gemini API Error:', error)
-      throw error
-    }
-  }
-
-  async generateContent(
-    prompt: string, 
-    options: {
-      temperature?: number
-      topK?: number
-      topP?: number
-      maxOutputTokens?: number
-    } = {}
-  ): Promise<string> {
-    try {
-      if (!this.apiKey) {
-        throw new Error('Gemini API key not configured. Please contact the system administrator.')
-      }
-
-      const {
-        temperature = 0.7,
-        topK = 40,
-        topP = 0.95,
-        maxOutputTokens = 1024 // Increased from 256 to 1024 for better title generation
-      } = options;
-
-      const response = await fetch(`${this.baseUrl}?key=${this.apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: prompt
-            }]
-          }],
-          generationConfig: {
-            temperature,
-            topK,
-            topP,
-            maxOutputTokens,
-          },
-          safetySettings: [
-            {
-              category: 'HARM_CATEGORY_HARASSMENT',
-              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-            },
-            {
-              category: 'HARM_CATEGORY_HATE_SPEECH',
-              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-            },
-            {
-              category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-            },
-            {
-              category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-            },
-          ],
-        }),
-      })
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        if (response.status === 404) {
-          const fallbacks = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro'];
-          for (const m of fallbacks) {
-            const url = `https://generativelanguage.googleapis.com/v1/models/${m}:generateContent?key=${this.apiKey}`;
-            const r2 = await fetch(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: options.temperature ?? 0.7, topK: options.topK ?? 40, topP: options.topP ?? 0.95, maxOutputTokens: options.maxOutputTokens ?? 256 } }),
-            });
-            if (r2.ok) {
-              const d2 = await r2.json();
-              // Handle both response structures
-              if (!d2.candidates || !d2.candidates.length || !d2.candidates[0].content) {
-                throw new Error('Invalid response structure from Gemini API');
-              }
-              const fallbackCandidate = d2.candidates[0]
-              if (fallbackCandidate.content.parts && fallbackCandidate.content.parts.length > 0) {
-                return fallbackCandidate.content.parts[0].text.trim();
-              } else if (fallbackCandidate.content.text) {
-                return fallbackCandidate.content.text.trim();
-              }
-            }
-          }
-        }
-        throw new Error(`Gemini API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`)
+        throw new Error(errorData.message || `Request failed with status ${response.status}`)
       }
-
+      
       const data = await response.json()
       
-      // Check if the response has the expected structure
-      if (!data.candidates || !data.candidates.length) {
-        console.error('Invalid Gemini API response - no candidates:', data)
-        throw new Error('Invalid response structure from Gemini API')
+      if (!data.success || !data.data) {
+        throw new Error('Invalid response from server')
       }
       
-      const candidate = data.candidates[0]
-      
-      // Check for MAX_TOKENS finish reason (truncated response)
-      if (candidate.finishReason === 'MAX_TOKENS') {
-        console.warn('Gemini API response was truncated due to MAX_TOKENS. Consider increasing maxOutputTokens.')
-        // For truncated responses, the content might be incomplete or empty
-        // We should still try to extract any available text
-      }
-      
-      if (!candidate.content) {
-        console.error('Invalid Gemini API response - no content:', data)
-        throw new Error('Invalid response structure from Gemini API')
-      }
-      
-      // Handle multiple response structures
-      if (candidate.content.parts && candidate.content.parts.length > 0) {
-        // Structure 1: parts array
-        const text = candidate.content.parts[0].text.trim()
-        if (!text && candidate.finishReason === 'MAX_TOKENS') {
-          throw new Error('Response truncated due to token limit - no text generated')
-        }
-        return text
-      } else if (candidate.content.text) {
-        // Structure 2: direct text field
-        const text = candidate.content.text.trim()
-        if (!text && candidate.finishReason === 'MAX_TOKENS') {
-          throw new Error('Response truncated due to token limit - no text generated')
-        }
-        return text
-      } else if (typeof candidate.content === 'string') {
-        // Structure 3: content is directly a string
-        const text = candidate.content.trim()
-        if (!text && candidate.finishReason === 'MAX_TOKENS') {
-          throw new Error('Response truncated due to token limit - no text generated')
-        }
-        return text
-      } else {
-        // Content has no text - this happens with MAX_TOKENS on Gemini 2.5 Flash
-        if (candidate.finishReason === 'MAX_TOKENS') {
-          throw new Error('Response truncated due to token limit - please increase maxOutputTokens or shorten your prompt')
-        }
-        console.error('Invalid Gemini API response - no text content:', {
-          content: candidate.content,
-          finishReason: candidate.finishReason,
-          fullData: data
-        })
-        throw new Error('Empty response from Gemini API')
+      return {
+        response: data.data.response,
+        title: data.data.title
       }
     } catch (error) {
       console.error('Gemini API Error:', error)
       throw error
     }
   }
+
+  // Title generation moved to backend to avoid duplicate API calls
 
   async analyzeStockSentiment(stockSymbol: string, newsData: string[]): Promise<string> {
     const prompt = `Analyze the sentiment of the following news articles for stock ${stockSymbol}:
@@ -550,15 +308,8 @@ Focus on diversified, long-term strategies.`
 // Export a singleton instance
 export const geminiAPI = new GeminiAPI()
 
-// Export a standalone function for convenience
-export const generateContent = async (prompt: string, options?: {
-  temperature?: number
-  topK?: number
-  topP?: number
-  maxOutputTokens?: number
-}): Promise<string> => {
-  return geminiAPI.generateContent(prompt, options);
-}
+// generateContent removed - title generation now happens on backend
+// This eliminates duplicate API calls and improves reliability
 
 // Export specific functions for stock analysis
 export const compareStocks = async (stock1: any, stock2: any): Promise<string> => {
