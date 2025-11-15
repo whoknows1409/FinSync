@@ -6,6 +6,8 @@ const Transaction = require('../models/Transaction');
 const Budget = require('../models/Budget');
 const FinancialGoal = require('../models/FinancialGoal');
 const ChatHistory = require('../models/ChatHistory');
+const TradingAccount = require('../models/TradingAccount');
+const RecurringTransaction = require('../models/RecurringTransaction');
 const mongoose = require('mongoose');
 
 // Dynamically require gemini module to avoid duplicate declaration issues
@@ -624,6 +626,135 @@ const getUserFinancialContext = async (userId) => {
     const avgProgress = goals.length > 0 ?
       goals.reduce((sum, g) => sum + g.progressPercentage, 0) / goals.length : 0;
 
+    // Get paper trading portfolio data
+    let tradingData = {
+      hasAccount: false,
+      walletBalance: 0,
+      totalValue: 0,
+      totalPnL: 0,
+      holdingsCount: 0,
+      holdings: [],
+      pendingOrders: 0,
+      executedOrders: 0,
+      watchlistCount: 0,
+      sectorAllocation: [],
+      tradingStats: {
+        totalTrades: 0,
+        successfulTrades: 0,
+        winRate: 0,
+        bestTrade: null,
+        worstTrade: null,
+      },
+    };
+
+    try {
+      const tradingAccount = await TradingAccount.findOne({ user: userId }).populate('holdings.stock');
+      
+      if (tradingAccount) {
+        // Update holding prices to get latest data
+        await tradingAccount.updateHoldingPrices();
+        
+        // Calculate unrealized P&L from holdings
+        const unrealizedPnL = tradingAccount.holdings.reduce((sum, h) => sum + h.unrealizedPnL, 0);
+        
+        tradingData = {
+          hasAccount: true,
+          walletBalance: tradingAccount.walletBalance,
+          totalValue: tradingAccount.totalValue,
+          totalPnL: tradingAccount.totalPnL + unrealizedPnL, // Include unrealized P&L
+          realizedPnL: tradingAccount.totalPnL,
+          unrealizedPnL: unrealizedPnL,
+          holdingsCount: tradingAccount.holdings.length,
+          holdings: tradingAccount.holdings.map(h => ({
+            symbol: h.symbol,
+            quantity: h.quantity,
+            averagePrice: h.averagePrice,
+            currentPrice: h.currentPrice,
+            marketValue: h.marketValue,
+            unrealizedPnL: h.unrealizedPnL,
+            pnlPercentage: h.pnlPercentage,
+            sector: h.sector,
+          })),
+          pendingOrders: tradingAccount.orders.filter(o => o.status === 'PENDING').length,
+          executedOrders: tradingAccount.orders.filter(o => o.status === 'EXECUTED').length,
+          watchlistCount: tradingAccount.watchlist.length,
+          sectorAllocation: await tradingAccount.getSectorAllocation(),
+          tradingStats: {
+            totalTrades: tradingAccount.tradingStats.totalTrades || 0,
+            successfulTrades: tradingAccount.tradingStats.successfulTrades || 0,
+            winRate: tradingAccount.tradingStats.winRate || 0,
+            bestTrade: tradingAccount.tradingStats.bestTrade,
+            worstTrade: tradingAccount.tradingStats.worstTrade,
+            totalVolume: tradingAccount.tradingStats.totalVolume || 0,
+          },
+        };
+      }
+    } catch (error) {
+      logger.error('Error fetching trading account data:', error);
+    }
+
+    // Get recurring transactions (subscriptions, bills, etc.)
+    let recurringData = {
+      count: 0,
+      activeCount: 0,
+      totalMonthlyExpenses: 0,
+      totalMonthlyIncome: 0,
+      expenses: [],
+      income: [],
+    };
+
+    try {
+      const recurringTransactions = await RecurringTransaction.find({
+        user: userId,
+        isActive: true,
+      });
+
+      const recurringExpenses = recurringTransactions.filter(r => r.type === 'expense');
+      const recurringIncome = recurringTransactions.filter(r => r.type === 'income');
+
+      // Calculate monthly equivalent amounts
+      const getMonthlyAmount = (amount, frequency) => {
+        switch (frequency) {
+          case 'daily': return amount * 30;
+          case 'weekly': return amount * 4;
+          case 'monthly': return amount;
+          case 'yearly': return amount / 12;
+          default: return amount;
+        }
+      };
+
+      const totalMonthlyExpenses = recurringExpenses.reduce(
+        (sum, r) => sum + getMonthlyAmount(r.amount, r.frequency), 0
+      );
+
+      const totalMonthlyIncome = recurringIncome.reduce(
+        (sum, r) => sum + getMonthlyAmount(r.amount, r.frequency), 0
+      );
+
+      recurringData = {
+        count: recurringTransactions.length,
+        activeCount: recurringTransactions.length,
+        totalMonthlyExpenses: Math.round(totalMonthlyExpenses),
+        totalMonthlyIncome: Math.round(totalMonthlyIncome),
+        expenses: recurringExpenses.map(r => ({
+          description: r.description,
+          amount: r.amount,
+          frequency: r.frequency,
+          category: r.category,
+          monthlyEquivalent: Math.round(getMonthlyAmount(r.amount, r.frequency)),
+        })),
+        income: recurringIncome.map(r => ({
+          description: r.description,
+          amount: r.amount,
+          frequency: r.frequency,
+          category: r.category,
+          monthlyEquivalent: Math.round(getMonthlyAmount(r.amount, r.frequency)),
+        })),
+      };
+    } catch (error) {
+      logger.error('Error fetching recurring transactions:', error);
+    }
+
     return {
       transactions: {
         count: currentMonthTransactions.length,
@@ -643,6 +774,8 @@ const getUserFinancialContext = async (userId) => {
         totalTarget,
         avgProgress: Math.round(avgProgress),
       },
+      recurring: recurringData,
+      trading: tradingData,
       historicalData: {
         allTime: {
           income: allFinancials.income,
@@ -672,6 +805,27 @@ const getUserFinancialContext = async (userId) => {
       transactions: { count: 0, totalIncome: 0, totalExpenses: 0, topCategories: [] },
       budgets: { count: 0, activeCount: 0, overBudgetCount: 0, avgUtilization: 0 },
       goals: { count: 0, activeCount: 0, totalTarget: 0, avgProgress: 0 },
+      recurring: {
+        count: 0,
+        activeCount: 0,
+        totalMonthlyExpenses: 0,
+        totalMonthlyIncome: 0,
+        expenses: [],
+        income: [],
+      },
+      trading: {
+        hasAccount: false,
+        walletBalance: 0,
+        totalValue: 0,
+        totalPnL: 0,
+        holdingsCount: 0,
+        holdings: [],
+        pendingOrders: 0,
+        executedOrders: 0,
+        watchlistCount: 0,
+        sectorAllocation: [],
+        tradingStats: { totalTrades: 0, successfulTrades: 0, winRate: 0, bestTrade: null, worstTrade: null },
+      },
       historicalData: {
         allTime: { income: 0, expenses: 0 },
         threeMonthsAgo: { income: 0, expenses: 0 },
@@ -689,7 +843,11 @@ const enhanceMessageWithContext = (message, context) => {
   
   // Add relevant context based on message content
   if (lowerMessage.includes('budget') || lowerMessage.includes('spending')) {
-    return `${message}\n\nMy current financial situation: Monthly income ₹${context.transactions.totalIncome.toLocaleString()}, expenses ₹${context.transactions.totalExpenses.toLocaleString()}, with ${context.budgets.overBudgetCount} categories over budget. All-time income: ₹${context.historicalData.allTime.income.toLocaleString()}, all-time expenses: ₹${context.historicalData.allTime.expenses.toLocaleString()}.`;
+    let recurringInfo = '';
+    if (context.recurring.count > 0) {
+      recurringInfo = ` I have ${context.recurring.activeCount} recurring transactions: ${context.recurring.totalMonthlyExpenses > 0 ? `monthly recurring expenses ₹${context.recurring.totalMonthlyExpenses.toLocaleString()}` : ''}${context.recurring.totalMonthlyIncome > 0 ? `, monthly recurring income ₹${context.recurring.totalMonthlyIncome.toLocaleString()}` : ''}.`;
+    }
+    return `${message}\n\nMy current financial situation: Monthly income ₹${context.transactions.totalIncome.toLocaleString()}, expenses ₹${context.transactions.totalExpenses.toLocaleString()}, with ${context.budgets.overBudgetCount} categories over budget.${recurringInfo} All-time income: ₹${context.historicalData.allTime.income.toLocaleString()}, all-time expenses: ₹${context.historicalData.allTime.expenses.toLocaleString()}.`;
   }
   
   if (lowerMessage.includes('income') || lowerMessage.includes('expense')) {
@@ -710,6 +868,44 @@ const enhanceMessageWithContext = (message, context) => {
   
   if (lowerMessage.includes('category') || lowerMessage.includes('categorize')) {
     return `${message}\n\nMy top spending categories are: ${context.transactions.topCategories.join(', ')}.`;
+  }
+  
+  // Add recurring expenses context for subscription and bill queries
+  if (lowerMessage.includes('subscription') || lowerMessage.includes('recurring') || 
+      lowerMessage.includes('bill') || lowerMessage.includes('monthly payment')) {
+    if (context.recurring.count > 0) {
+      const topExpenses = context.recurring.expenses
+        .sort((a, b) => b.monthlyEquivalent - a.monthlyEquivalent)
+        .slice(0, 5)
+        .map(r => `${r.description} (₹${r.monthlyEquivalent.toLocaleString()}/${r.frequency === 'monthly' ? 'month' : r.frequency})`)
+        .join(', ');
+      
+      return `${message}\n\nMy recurring transactions: Total monthly recurring expenses ₹${context.recurring.totalMonthlyExpenses.toLocaleString()}, monthly recurring income ₹${context.recurring.totalMonthlyIncome.toLocaleString()}. I have ${context.recurring.activeCount} active recurring transactions${topExpenses ? `: ${topExpenses}` : ''}.`;
+    } else {
+      return `${message}\n\nNote: I don't have any recurring transactions set up yet.`;
+    }
+  }
+  
+  // Add trading/portfolio context for investment and stock queries
+  if (lowerMessage.includes('stock') || lowerMessage.includes('invest') || lowerMessage.includes('trade') || 
+      lowerMessage.includes('portfolio') || lowerMessage.includes('holding') || lowerMessage.includes('share')) {
+    if (context.trading.hasAccount) {
+      const topHoldings = context.trading.holdings
+        .sort((a, b) => b.marketValue - a.marketValue)
+        .slice(0, 5)
+        .map(h => `${h.symbol} (₹${h.marketValue.toLocaleString()}, P&L: ${h.pnlPercentage.toFixed(2)}%)`)
+        .join(', ');
+      
+      const sectorInfo = context.trading.sectorAllocation
+        .sort((a, b) => b.percentage - a.percentage)
+        .slice(0, 3)
+        .map(s => `${s.sector}: ${s.percentage.toFixed(1)}%`)
+        .join(', ');
+      
+      return `${message}\n\nMy paper trading portfolio: Wallet balance ₹${context.trading.walletBalance.toLocaleString()}, Total value ₹${context.trading.totalValue.toLocaleString()}, Total P&L ₹${context.trading.totalPnL.toLocaleString()} (Realized: ₹${context.trading.realizedPnL.toLocaleString()}, Unrealized: ₹${context.trading.unrealizedPnL.toLocaleString()}). I have ${context.trading.holdingsCount} holdings${topHoldings ? `: ${topHoldings}` : ''}. Sector allocation: ${sectorInfo || 'No allocations yet'}. Trading stats: ${context.trading.tradingStats.totalTrades} trades, ${context.trading.tradingStats.winRate.toFixed(1)}% win rate${context.trading.tradingStats.bestTrade ? `, best trade: ${context.trading.tradingStats.bestTrade.symbol} (₹${context.trading.tradingStats.bestTrade.pnl.toLocaleString()})` : ''}.`;
+    } else {
+      return `${message}\n\nNote: I don't have a paper trading account yet.`;
+    }
   }
   
   return message;
