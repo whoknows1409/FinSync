@@ -651,11 +651,18 @@ const getUserFinancialContext = async (userId) => {
       const tradingAccount = await TradingAccount.findOne({ user: userId }).populate('holdings.stock');
       
       if (tradingAccount) {
-        // Update holding prices to get latest data
-        await tradingAccount.updateHoldingPrices();
-        
-        // Calculate unrealized P&L from holdings
+        // Don't fetch real-time prices - let Gemini handle that with its own data
+        // Calculate unrealized P&L from holdings (using cached prices)
         const unrealizedPnL = tradingAccount.holdings.reduce((sum, h) => sum + h.unrealizedPnL, 0);
+        
+        // Get sector allocation (from static data, no external API)
+        let sectorAllocation = [];
+        try {
+          sectorAllocation = await tradingAccount.getSectorAllocation();
+        } catch (sectorError) {
+          logger.warn('Could not get sector allocation:', sectorError.message);
+          // Use default empty array
+        }
         
         tradingData = {
           hasAccount: true,
@@ -678,7 +685,7 @@ const getUserFinancialContext = async (userId) => {
           pendingOrders: tradingAccount.orders.filter(o => o.status === 'PENDING').length,
           executedOrders: tradingAccount.orders.filter(o => o.status === 'EXECUTED').length,
           watchlistCount: tradingAccount.watchlist.length,
-          sectorAllocation: await tradingAccount.getSectorAllocation(),
+          sectorAllocation: sectorAllocation,
           tradingStats: {
             totalTrades: tradingAccount.tradingStats.totalTrades || 0,
             successfulTrades: tradingAccount.tradingStats.successfulTrades || 0,
