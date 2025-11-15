@@ -626,7 +626,7 @@ const getUserFinancialContext = async (userId) => {
     const avgProgress = goals.length > 0 ?
       goals.reduce((sum, g) => sum + g.progressPercentage, 0) / goals.length : 0;
 
-    // Get paper trading portfolio data
+    // Get paper trading portfolio data (simplified, no external API calls)
     let tradingData = {
       hasAccount: false,
       walletBalance: 0,
@@ -637,7 +637,6 @@ const getUserFinancialContext = async (userId) => {
       pendingOrders: 0,
       executedOrders: 0,
       watchlistCount: 0,
-      sectorAllocation: [],
       tradingStats: {
         totalTrades: 0,
         successfulTrades: 0,
@@ -648,56 +647,45 @@ const getUserFinancialContext = async (userId) => {
     };
 
     try {
-      const tradingAccount = await TradingAccount.findOne({ user: userId }).populate('holdings.stock');
+      const tradingAccount = await TradingAccount.findOne({ user: userId });
       
       if (tradingAccount) {
-        // Don't fetch real-time prices - let Gemini handle that with its own data
-        // Calculate unrealized P&L from holdings (using cached prices)
-        const unrealizedPnL = tradingAccount.holdings.reduce((sum, h) => sum + h.unrealizedPnL, 0);
-        
-        // Get sector allocation (from static data, no external API)
-        let sectorAllocation = [];
-        try {
-          sectorAllocation = await tradingAccount.getSectorAllocation();
-        } catch (sectorError) {
-          logger.warn('Could not get sector allocation:', sectorError.message);
-          // Use default empty array
-        }
+        // Use only cached data, no external API calls or population
+        const unrealizedPnL = tradingAccount.holdings.reduce((sum, h) => sum + (h.unrealizedPnL || 0), 0);
         
         tradingData = {
           hasAccount: true,
-          walletBalance: tradingAccount.walletBalance,
-          totalValue: tradingAccount.totalValue,
-          totalPnL: tradingAccount.totalPnL + unrealizedPnL, // Include unrealized P&L
-          realizedPnL: tradingAccount.totalPnL,
+          walletBalance: tradingAccount.walletBalance || 0,
+          totalValue: tradingAccount.totalValue || 0,
+          totalPnL: (tradingAccount.totalPnL || 0) + unrealizedPnL,
+          realizedPnL: tradingAccount.totalPnL || 0,
           unrealizedPnL: unrealizedPnL,
-          holdingsCount: tradingAccount.holdings.length,
-          holdings: tradingAccount.holdings.map(h => ({
-            symbol: h.symbol,
-            quantity: h.quantity,
-            averagePrice: h.averagePrice,
-            currentPrice: h.currentPrice,
-            marketValue: h.marketValue,
-            unrealizedPnL: h.unrealizedPnL,
-            pnlPercentage: h.pnlPercentage,
-            sector: h.sector,
+          holdingsCount: tradingAccount.holdings?.length || 0,
+          holdings: (tradingAccount.holdings || []).slice(0, 5).map(h => ({
+            symbol: h.symbol || 'N/A',
+            quantity: h.quantity || 0,
+            averagePrice: h.averagePrice || 0,
+            currentPrice: h.currentPrice || 0,
+            marketValue: h.marketValue || 0,
+            unrealizedPnL: h.unrealizedPnL || 0,
+            pnlPercentage: h.pnlPercentage || 0,
           })),
-          pendingOrders: tradingAccount.orders.filter(o => o.status === 'PENDING').length,
-          executedOrders: tradingAccount.orders.filter(o => o.status === 'EXECUTED').length,
-          watchlistCount: tradingAccount.watchlist.length,
-          sectorAllocation: sectorAllocation,
+          pendingOrders: tradingAccount.orders?.filter(o => o.status === 'PENDING').length || 0,
+          executedOrders: tradingAccount.orders?.filter(o => o.status === 'EXECUTED').length || 0,
+          watchlistCount: tradingAccount.watchlist?.length || 0,
           tradingStats: {
-            totalTrades: tradingAccount.tradingStats.totalTrades || 0,
-            successfulTrades: tradingAccount.tradingStats.successfulTrades || 0,
-            winRate: tradingAccount.tradingStats.winRate || 0,
-            bestTrade: tradingAccount.tradingStats.bestTrade,
-            worstTrade: tradingAccount.tradingStats.worstTrade,
-            totalVolume: tradingAccount.tradingStats.totalVolume || 0,
+            totalTrades: tradingAccount.tradingStats?.totalTrades || 0,
+            successfulTrades: tradingAccount.tradingStats?.successfulTrades || 0,
+            winRate: tradingAccount.tradingStats?.winRate || 0,
+            bestTrade: tradingAccount.tradingStats?.bestTrade || null,
+            worstTrade: tradingAccount.tradingStats?.worstTrade || null,
+            totalVolume: tradingAccount.tradingStats?.totalVolume || 0,
           },
         };
       }
     } catch (error) {
-      logger.error('Error fetching trading account data:', error);
+      logger.warn('Could not fetch trading account data, skipping:', error.message);
+      // Continue with default empty trading data
     }
 
     // Get recurring transactions (subscriptions, bills, etc.)
@@ -830,7 +818,6 @@ const getUserFinancialContext = async (userId) => {
         pendingOrders: 0,
         executedOrders: 0,
         watchlistCount: 0,
-        sectorAllocation: [],
         tradingStats: { totalTrades: 0, successfulTrades: 0, winRate: 0, bestTrade: null, worstTrade: null },
       },
       historicalData: {
@@ -899,17 +886,11 @@ const enhanceMessageWithContext = (message, context) => {
     if (context.trading.hasAccount) {
       const topHoldings = context.trading.holdings
         .sort((a, b) => b.marketValue - a.marketValue)
-        .slice(0, 5)
+        .slice(0, 3)
         .map(h => `${h.symbol} (₹${h.marketValue.toLocaleString()}, P&L: ${h.pnlPercentage.toFixed(2)}%)`)
         .join(', ');
       
-      const sectorInfo = context.trading.sectorAllocation
-        .sort((a, b) => b.percentage - a.percentage)
-        .slice(0, 3)
-        .map(s => `${s.sector}: ${s.percentage.toFixed(1)}%`)
-        .join(', ');
-      
-      return `${message}\n\nMy paper trading portfolio: Wallet balance ₹${context.trading.walletBalance.toLocaleString()}, Total value ₹${context.trading.totalValue.toLocaleString()}, Total P&L ₹${context.trading.totalPnL.toLocaleString()} (Realized: ₹${context.trading.realizedPnL.toLocaleString()}, Unrealized: ₹${context.trading.unrealizedPnL.toLocaleString()}). I have ${context.trading.holdingsCount} holdings${topHoldings ? `: ${topHoldings}` : ''}. Sector allocation: ${sectorInfo || 'No allocations yet'}. Trading stats: ${context.trading.tradingStats.totalTrades} trades, ${context.trading.tradingStats.winRate.toFixed(1)}% win rate${context.trading.tradingStats.bestTrade ? `, best trade: ${context.trading.tradingStats.bestTrade.symbol} (₹${context.trading.tradingStats.bestTrade.pnl.toLocaleString()})` : ''}.`;
+      return `${message}\n\nMy paper trading portfolio: Wallet balance ₹${context.trading.walletBalance.toLocaleString()}, Total value ₹${context.trading.totalValue.toLocaleString()}, Total P&L ₹${context.trading.totalPnL.toLocaleString()} (Realized: ₹${context.trading.realizedPnL.toLocaleString()}, Unrealized: ₹${context.trading.unrealizedPnL.toLocaleString()}). I have ${context.trading.holdingsCount} holdings${topHoldings ? `: ${topHoldings}` : ''}. Trading stats: ${context.trading.tradingStats.totalTrades} trades, ${context.trading.tradingStats.winRate.toFixed(1)}% win rate${context.trading.tradingStats.bestTrade ? `, best trade: ${context.trading.tradingStats.bestTrade.symbol} (₹${context.trading.tradingStats.bestTrade.pnl.toLocaleString()})` : ''}.`;
     } else {
       return `${message}\n\nNote: I don't have a paper trading account yet.`;
     }
