@@ -35,6 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { MessageRenderer } from "./message-renderer"
 
 // Utility function to remove markdown formatting
 const removeMarkdown = (text: string): string => {
@@ -787,13 +788,15 @@ export function ChatInterface({
                               : "bg-muted text-foreground"
                           }`}
                         >
-                          <p className="text-sm whitespace-pre-wrap">
-                            {message.role === "assistant" && typingMessageId === message.id
-                              ? typingContent
-                              : message.role === "assistant"
-                              ? removeMarkdown(message.content)
-                              : message.content}
-                          </p>
+                          <div className="text-sm">
+                            {message.role === "assistant" && typingMessageId === message.id ? (
+                              <div className="whitespace-pre-wrap">{typingContent}</div>
+                            ) : message.role === "assistant" ? (
+                              <MessageRenderer content={message.content} isUser={false} />
+                            ) : (
+                              <div className="whitespace-pre-wrap">{message.content}</div>
+                            )}
+                          </div>
                           <p className="text-xs opacity-70 mt-1">
                             {formatTimeInIST(message.timestamp)}
                           </p>
