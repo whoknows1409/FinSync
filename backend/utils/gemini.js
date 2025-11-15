@@ -28,7 +28,7 @@ class GeminiAPI {
           temperature: options.temperature || 0.7,
           topK: options.topK || 40,
           topP: options.topP || 0.95,
-          maxOutputTokens: options.maxOutputTokens || 1024,
+          maxOutputTokens: options.maxOutputTokens || 8192,
         },
         safetySettings: [
           {

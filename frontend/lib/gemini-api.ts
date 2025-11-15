@@ -136,7 +136,8 @@ Please provide:
 
 Keep the analysis concise and actionable.`
 
-    return this.sendMessage(prompt, [], { maxOutputTokens: 512 })
+    const result = await this.sendMessage(prompt, [])
+    return result.response
   }
 
   async getBudgetAdvice(income: number, expenses: number, goals: string[]): Promise<string> {
@@ -154,7 +155,8 @@ Please provide:
 
 Make the advice practical and actionable.`
 
-    return this.sendMessage(prompt, [], { maxOutputTokens: 768 })
+    const result = await this.sendMessage(prompt, [])
+    return result.response
   }
 
   async getInvestmentAdvice(riskProfile: string, investmentAmount: number, timeHorizon: string): Promise<string> {
@@ -172,7 +174,8 @@ Please provide:
 
 Focus on diversified, long-term strategies.`
 
-    return this.sendMessage(prompt, [], { maxOutputTokens: 768 })
+    const result = await this.sendMessage(prompt, [])
+    return result.response
   }
 
   async compareStocks(stock1: any, stock2: any): Promise<string> {
@@ -194,10 +197,8 @@ Focus on diversified, long-term strategies.`
     
     Provide a concise comparison summary in 2-3 sentences highlighting which stock appears more attractive based on fundamentals and recent performance.`
 
-    return this.sendMessage(prompt, [], { 
-      temperature: 0.3,
-      maxOutputTokens: 300 
-    })
+    const result = await this.sendMessage(prompt, [], { temperature: 0.3 })
+    return result.response
   }
 
   async analyzeStock(stock: any): Promise<any> {
@@ -233,10 +234,8 @@ Focus on diversified, long-term strategies.`
     }`
 
     try {
-      const responseText = await this.sendMessage(prompt, [], { 
-        temperature: 0.2,
-        maxOutputTokens: 2048 
-      })
+      const result = await this.sendMessage(prompt, [], { temperature: 0.2 })
+      const responseText = result.response
       
       // Try to parse the response as JSON
       try {
