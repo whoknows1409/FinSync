@@ -136,6 +136,7 @@ export function ChatInterface({
   const [typingContent, setTypingContent] = useState("")
   const typingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const [isGeneratingResponse, setIsGeneratingResponse] = useState(false) // Track overall response generation state
+  const isCancelledRef = useRef(false) // Track if current request was cancelled
   
   // Sticky header state
   const [isHeaderSticky, setIsHeaderSticky] = useState(false)
@@ -544,6 +545,7 @@ export function ChatInterface({
     setIsLoading(true)
     setIsGeneratingResponse(true) // Start response generation
     setPromptCount(prev => prev + 1)
+    isCancelledRef.current = false // Reset cancelled flag
     
     // Create new abort controller for this request
     abortControllerRef.current = new AbortController()
@@ -566,6 +568,11 @@ export function ChatInterface({
         { generateTitle: isFirstUserMessage }
       )
       
+      // Check if request was cancelled while waiting for response
+      if (isCancelledRef.current) {
+        return; // Exit early, don't process the response
+      }
+      
       // Store the title if generated
       if (response.data.title) {
         setGeneratedTitleRef.current = response.data.title;
@@ -579,6 +586,11 @@ export function ChatInterface({
         content: cleanedResponse,
         role: "assistant",
         timestamp: new Date(),
+      }
+      
+      // Check again before adding message (in case cancelled during processing)
+      if (isCancelledRef.current) {
+        return;
       }
       
       // Add AI message and start typing effect
@@ -595,10 +607,12 @@ export function ChatInterface({
       startTypingEffect(aiMessage.id, cleanedResponse);
       
       // Handle voice output based on selected mode
-      if (outputMode === 'voice' || outputMode === 'both') {
+      if (!isCancelledRef.current && (outputMode === 'voice' || outputMode === 'both')) {
         // Use a timeout to start speaking after a short delay
         setTimeout(() => {
-          speakText(cleanedResponse);
+          if (!isCancelledRef.current) {
+            speakText(cleanedResponse);
+          }
         }, 500);
       }
     } catch (error: any) {
@@ -627,6 +641,9 @@ export function ChatInterface({
   }
   
   const handleStopResponse = () => {
+    // Set cancelled flag to prevent any pending operations
+    isCancelledRef.current = true;
+    
     // Abort the ongoing request if still in progress
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
