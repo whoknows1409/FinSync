@@ -688,10 +688,18 @@ export function ChatInterface({
   }
 
   const handleNewChat = () => {
+    // Set cancelled flag to stop any ongoing operations
+    isCancelledRef.current = true;
+    
     // Clean up any existing typing interval
     if (typingIntervalRef.current) {
       clearInterval(typingIntervalRef.current)
       typingIntervalRef.current = null
+    }
+    
+    // Abort any ongoing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
     }
     
     // Reset typing states
@@ -700,7 +708,7 @@ export function ChatInterface({
     setIsGeneratingResponse(false)
     
     // Stop any ongoing speech
-    stopSpeech();
+    stopSpeech()
     
     // Reset chat state
     const newMessages: Message[] = [{
@@ -718,15 +726,15 @@ export function ChatInterface({
     setPromptCount(0)
     setInput("")
     setHasFirstReply(false) // Reset for new chat
+    setIsLoading(false) // Reset loading state
     lastSavedMessages.current = newMessages
+    isChatLoaded.current = false
     
     // Notify parent component
     if (onNewChat) {
       onNewChat()
     }
-  }
-
-  const quickQuestions = [
+  }  const quickQuestions = [
     "How should I budget my monthly income?",
     "What's the best way to start investing?",
     "How do I build an emergency fund?",
