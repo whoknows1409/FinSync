@@ -716,10 +716,6 @@ export function ChatInterface({
                       <MonitorSpeaker className="mr-2 h-4 w-4" />
                       <span>Text Only</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleOutputModeChange('voice')}>
-                      <Volume2 className="mr-2 h-4 w-4" />
-                      <span>Voice Only</span>
-                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleOutputModeChange('both')}>
                       <Volume2 className="mr-2 h-4 w-4" />
                       <span>Text + Voice</span>
