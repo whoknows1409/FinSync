@@ -79,15 +79,21 @@
 - ✅ Budget optimization suggestions
 - ✅ Natural language queries
 - ✅ Personalized responses
-- ✅ Voice input/output support
+- ✅ Voice input support with speech recognition
+- ✅ Text + Voice output modes
+- ✅ Stop response button (stop at any time)
+- ✅ Typing animation effects
+- ✅ Chat history with export (PDF, Text, WhatsApp)
+- ✅ 10 prompts per chat limit
+- ✅ Auto-save chat conversations
 
 ### 📈 Analytics & Insights
 - ✅ Interactive spending charts
-- ✅ Category-wise expense breakdown
+- ✅ Category-wise expense breakdown with improved pie chart labels
 - ✅ Monthly/yearly comparisons
 - ✅ Budget vs actual analysis
 - ✅ Income vs expense trends
-- ✅ Export reports
+- ✅ Export reports to PDF/Excel
 
 ---
 
@@ -274,19 +280,13 @@ See `.env.example` files for complete configuration.
 
 ### Deploy to Render (Recommended)
 
-FinSync is optimized for deployment on Render with comprehensive guides:
-
-📚 **Deployment Documentation**:
-1. 🚀 **[DEPLOYMENT_QUICK_START.md](DEPLOYMENT_QUICK_START.md)** - 5-minute quick start guide
-2. 📖 **[RENDER_DEPLOYMENT_GUIDE.md](RENDER_DEPLOYMENT_GUIDE.md)** - Complete step-by-step guide
-3. ✅ **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** - Interactive checklist
-4. 🔧 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
+FinSync is optimized for deployment on Render.
 
 **Deployment Time**: ~10-15 minutes
 
 **Cost**:
-- 🎉 Free tier: $0/month (with 15-min sleep after inactivity)
-- ⚡ Paid tier: $14/month ($7/service, always warm)
+- 🎉 Free tier: $0/month (with cold starts after inactivity)
+- ⚡ Paid tier: Starting at $7/month per service
 
 ### Prerequisites
 - ✅ GitHub account with this repo pushed
@@ -370,8 +370,11 @@ Authorization: Bearer <your_jwt_token>
 - `GET /api/trading/portfolio` - Get portfolio
 
 #### Chatbot
-- `POST /api/chatbot/chat` - Send message
-- `GET /api/chatbot/history` - Get chat history
+- `POST /api/v1/chatbot/query` - Send message with conversation history
+- `POST /api/v1/chatbot/save-chat` - Save chat conversation
+- `GET /api/v1/chatbot/chat-history` - Get all chat history
+- `DELETE /api/v1/chatbot/chat-history/:id` - Delete specific chat
+- `DELETE /api/v1/chatbot/chat-history` - Clear all chat history
 
 For complete API documentation, see [API.md](backend/docs/API.md)
 
@@ -478,6 +481,13 @@ Need help? Here are your options:
 
 ## 🗺️ Roadmap
 
+### Recently Completed
+- [x] Stop response button in chatbot
+- [x] Voice input/output modes
+- [x] Fixed pie chart label overlapping
+- [x] Chat export functionality (PDF, Text, WhatsApp)
+- [x] Improved chatbot UI with typing effects
+
 ### Upcoming Features
 - [ ] Mobile app (React Native)
 - [ ] Multi-currency support
@@ -487,6 +497,7 @@ Need help? Here are your options:
 - [ ] Family/shared budgets
 - [ ] Advanced analytics dashboard
 - [ ] Third-party bank integration
+- [ ] Chatbot conversation search
 
 ---
 
