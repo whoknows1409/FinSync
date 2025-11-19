@@ -26,7 +26,6 @@ interface Holding {
   averagePrice: number
   currentPrice: number
   marketValue: number
-  unrealizedPnL: number
   pnlPercentage: number
   sector: string
 }
@@ -428,12 +427,6 @@ export default function TradingPage() {
   // Calculate P&L from orders (realized)
   const realizedPnL = calculatePnLFromOrders(orders);
   const { totalProfit, totalLoss } = calculateProfitAndLoss(orders);
-  
-  // Calculate unrealized P&L from holdings
-  const unrealizedPnL = holdings.reduce((sum, h) => sum + (h.unrealizedPnL || 0), 0);
-  
-  // Total P&L = Realized + Unrealized
-  const calculatedPnL = realizedPnL + unrealizedPnL;
 
   if (isLoading && !accountData) {
     return (
@@ -453,7 +446,7 @@ export default function TradingPage() {
         activeOrders={orders.filter(o => o.status === 'PENDING').length}
         totalTrades={orders.filter(o => o.status === 'EXECUTED').length}
         portfolioValue={accountData?.totalValue || 0}
-        totalPnL={calculatedPnL}
+        totalPnL={realizedPnL}
         totalProfit={totalProfit}
         totalLoss={totalLoss}
         isLoading={isLoading}
