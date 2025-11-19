@@ -638,11 +638,19 @@ export function ChatInterface({
       typingIntervalRef.current = null
     }
     
-    // If we're in the middle of typing, complete the message immediately
-    if (typingMessageId && typingContent) {
-      // The message is already in the messages array, just stop the typing animation
+    // If we're in the middle of typing, remove the incomplete message
+    if (typingMessageId) {
+      setMessages((prev) => prev.filter(msg => msg.id !== typingMessageId))
       setTypingMessageId(null)
       setTypingContent("")
+    }
+    
+    // If loading (API call in progress), remove the last user message if we haven't got a response yet
+    if (isLoading && !typingMessageId) {
+      // Remove the last message (user's question) since we're stopping before getting a response
+      setMessages((prev) => prev.slice(0, -1))
+      // Decrease prompt count since we're canceling this prompt
+      setPromptCount(prev => Math.max(0, prev - 1))
     }
     
     // Stop speech
