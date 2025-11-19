@@ -734,7 +734,9 @@ export function ChatInterface({
     if (onNewChat) {
       onNewChat()
     }
-  }  const quickQuestions = [
+  }
+
+  const quickQuestions = [
     "How should I budget my monthly income?",
     "What's the best way to start investing?",
     "How do I build an emergency fund?",
