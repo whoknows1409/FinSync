@@ -21,7 +21,8 @@ import {
   MicOff,
   Volume2,
   VolumeX,
-  MonitorSpeaker
+  MonitorSpeaker,
+  Square
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { geminiAPI, isGeminiConfigured, type GeminiMessage } from "@/lib/gemini-api"
@@ -149,6 +150,9 @@ export function ChatInterface({
   
   // Store the generated title from backend
   const setGeneratedTitleRef = useRef<string | null>(null)
+  
+  // Abort controller for stopping API requests
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     // Check if Gemini API is configured
@@ -167,7 +171,7 @@ export function ChatInterface({
     }
   }, [])
 
-  // Clean up typing interval and speech synthesis on unmount
+  // Clean up typing interval, speech synthesis, and abort controller on unmount
   useEffect(() => {
     return () => {
       if (typingIntervalRef.current) {
@@ -177,6 +181,11 @@ export function ChatInterface({
       // Cancel any ongoing speech
       if (speechSynthesisRef.current) {
         speechSynthesisRef.current.cancel()
+      }
+      
+      // Abort any ongoing API requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
       }
     }
   }, [])
@@ -531,6 +540,9 @@ export function ChatInterface({
     setInput("")
     setIsLoading(true)
     setPromptCount(prev => prev + 1)
+    
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController()
 
     try {
       // Convert messages to Gemini format
@@ -585,20 +597,48 @@ export function ChatInterface({
           speakText(cleanedResponse);
         }, 500);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Chat error:', error)
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: "I'm sorry, I'm having trouble connecting to the AI service. Please check your API configuration in settings or try again later.",
-        role: "assistant",
-        timestamp: new Date(),
-        isError: true,
+      
+      // Don't show error if request was aborted by user
+      if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+        toast.info("Response stopped")
+      } else {
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: "I'm sorry, I'm having trouble connecting to the AI service. Please check your API configuration in settings or try again later.",
+          role: "assistant",
+          timestamp: new Date(),
+          isError: true,
+        }
+        setMessages((prev) => [...prev, errorMessage])
+        toast.error("Failed to get AI response")
       }
-      setMessages((prev) => [...prev, errorMessage])
-      toast.error("Failed to get AI response")
     } finally {
       setIsLoading(false)
+      abortControllerRef.current = null
     }
+  }
+  
+  const handleStopResponse = () => {
+    // Abort the ongoing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    
+    // Stop typing effect
+    if (typingIntervalRef.current) {
+      clearInterval(typingIntervalRef.current)
+      typingIntervalRef.current = null
+    }
+    setTypingMessageId(null)
+    setTypingContent("")
+    
+    // Stop speech
+    stopSpeech()
+    
+    // Reset loading state
+    setIsLoading(false)
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -892,14 +932,26 @@ export function ChatInterface({
               onKeyPress={handleKeyPress}
               placeholder="Ask me about budgeting, investing, or financial planning..."
               className="flex-1"
-              disabled={!isConfigured || promptCount >= MAX_PROMPTS_PER_CHAT}
+              disabled={!isConfigured || promptCount >= MAX_PROMPTS_PER_CHAT || isLoading}
             />
-            <Button 
-              onClick={handleSend} 
-              disabled={!input || typeof input !== 'string' || !input.trim() || isLoading || !isConfigured || promptCount >= MAX_PROMPTS_PER_CHAT}
-            >
-              <Send className="h-4 w-4" />
-            </Button>
+            {isLoading ? (
+              <Button 
+                onClick={handleStopResponse}
+                variant="destructive"
+                size="sm"
+                className="px-3"
+              >
+                <Square className="h-4 w-4 fill-current" />
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleSend} 
+                disabled={!input || typeof input !== 'string' || !input.trim() || !isConfigured || promptCount >= MAX_PROMPTS_PER_CHAT}
+                size="sm"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            )}
           </div>
           {promptCount >= MAX_PROMPTS_PER_CHAT && (
             <p className="text-xs text-muted-foreground mt-2 text-center">

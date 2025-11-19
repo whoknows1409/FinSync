@@ -119,6 +119,38 @@ export function ExpenseBreakdownChart() {
     )
   }
 
+  // Custom label renderer that prevents overlap by only showing labels for larger segments
+  const renderCustomLabel = ({
+    cx,
+    cy,
+    midAngle,
+    innerRadius,
+    outerRadius,
+    percentage,
+    category,
+  }: any) => {
+    // Only show label if segment is larger than 5%
+    if (percentage < 5) return null;
+
+    const RADIAN = Math.PI / 180;
+    const radius = outerRadius + 25;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+    return (
+      <text
+        x={x}
+        y={y}
+        fill="hsl(var(--foreground))"
+        textAnchor={x > cx ? 'start' : 'end'}
+        dominantBaseline="central"
+        className="text-xs font-medium"
+      >
+        {`${category} (${percentage}%)`}
+      </text>
+    );
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -128,16 +160,19 @@ export function ExpenseBreakdownChart() {
       <CardContent>
         {/* Convert expenseData to ChartDataInput format */}
         {expenseData.length > 0 && (
-          <ChartContainer config={chartConfig} className="h-[300px]">
+          <ChartContainer config={chartConfig} className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={expenseData as ChartDataInput[]}
                   cx="50%"
                   cy="50%"
-                  labelLine={false}
-                  label={({ category, percentage }) => `${category}: ${percentage}%`}
-                  outerRadius={80}
+                  labelLine={{
+                    stroke: 'hsl(var(--muted-foreground))',
+                    strokeWidth: 1,
+                  }}
+                  label={renderCustomLabel}
+                  outerRadius={90}
                   fill="#8884d8"
                   dataKey="amount"
                 >
