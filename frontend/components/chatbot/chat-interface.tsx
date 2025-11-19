@@ -135,6 +135,7 @@ export function ChatInterface({
   const [typingMessageId, setTypingMessageId] = useState<string | null>(null)
   const [typingContent, setTypingContent] = useState("")
   const typingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const [isGeneratingResponse, setIsGeneratingResponse] = useState(false) // Track overall response generation state
   
   // Sticky header state
   const [isHeaderSticky, setIsHeaderSticky] = useState(false)
@@ -498,6 +499,7 @@ export function ChatInterface({
     
     setTypingMessageId(messageId)
     setTypingContent("")
+    setIsGeneratingResponse(true) // Mark as generating
     
     let index = 0
     typingIntervalRef.current = setInterval(() => {
@@ -512,6 +514,7 @@ export function ChatInterface({
         }
         setTypingMessageId(null)
         setTypingContent("")
+        setIsGeneratingResponse(false) // Mark as complete
       }
     }, TYPING_SPEED)
   }
@@ -539,6 +542,7 @@ export function ChatInterface({
     const currentInput = input
     setInput("")
     setIsLoading(true)
+    setIsGeneratingResponse(true) // Start response generation
     setPromptCount(prev => prev + 1)
     
     // Create new abort controller for this request
@@ -603,6 +607,7 @@ export function ChatInterface({
       // Don't show error if request was aborted by user
       if (error.name === 'AbortError' || error.message?.includes('aborted')) {
         toast.info("Response stopped")
+        setIsGeneratingResponse(false) // Stop generation state
       } else {
         const errorMessage: Message = {
           id: (Date.now() + 1).toString(),
@@ -613,6 +618,7 @@ export function ChatInterface({
         }
         setMessages((prev) => [...prev, errorMessage])
         toast.error("Failed to get AI response")
+        setIsGeneratingResponse(false) // Stop generation state
       }
     } finally {
       setIsLoading(false)
@@ -621,7 +627,7 @@ export function ChatInterface({
   }
   
   const handleStopResponse = () => {
-    // Abort the ongoing request
+    // Abort the ongoing request if still in progress
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
@@ -631,14 +637,22 @@ export function ChatInterface({
       clearInterval(typingIntervalRef.current)
       typingIntervalRef.current = null
     }
-    setTypingMessageId(null)
-    setTypingContent("")
+    
+    // If we're in the middle of typing, complete the message immediately
+    if (typingMessageId && typingContent) {
+      // The message is already in the messages array, just stop the typing animation
+      setTypingMessageId(null)
+      setTypingContent("")
+    }
     
     // Stop speech
     stopSpeech()
     
-    // Reset loading state
+    // Reset all states
     setIsLoading(false)
+    setIsGeneratingResponse(false)
+    
+    toast.info("Response stopped")
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -658,6 +672,7 @@ export function ChatInterface({
     // Reset typing states
     setTypingMessageId(null)
     setTypingContent("")
+    setIsGeneratingResponse(false)
     
     // Stop any ongoing speech
     stopSpeech();
@@ -932,14 +947,15 @@ export function ChatInterface({
               onKeyPress={handleKeyPress}
               placeholder="Ask me about budgeting, investing, or financial planning..."
               className="flex-1"
-              disabled={!isConfigured || promptCount >= MAX_PROMPTS_PER_CHAT || isLoading}
+              disabled={!isConfigured || promptCount >= MAX_PROMPTS_PER_CHAT || isGeneratingResponse}
             />
-            {isLoading ? (
+            {isGeneratingResponse ? (
               <Button 
                 onClick={handleStopResponse}
                 variant="destructive"
                 size="sm"
                 className="px-3"
+                title="Stop response"
               >
                 <Square className="h-4 w-4 fill-current" />
               </Button>
@@ -948,6 +964,7 @@ export function ChatInterface({
                 onClick={handleSend} 
                 disabled={!input || typeof input !== 'string' || !input.trim() || !isConfigured || promptCount >= MAX_PROMPTS_PER_CHAT}
                 size="sm"
+                title="Send message"
               >
                 <Send className="h-4 w-4" />
               </Button>
