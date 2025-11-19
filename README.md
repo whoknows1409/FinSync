@@ -475,7 +475,7 @@ Need help? Here are your options:
 - 📖 Read the [Documentation](#-documentation)
 - 🐛 Report issues on [GitHub Issues](https://github.com/whoknows1409/finsync/issues)
 - 💬 Start a [Discussion](https://github.com/whoknows1409/finsync/discussions)
-- 📧 Email: dakshb2211@gmail.com
+- 📧 Email: immortalomi14@gmail.com
 
 ---
 
@@ -514,7 +514,7 @@ Need help? Here are your options:
 
 **⭐ Star this repo if you find it helpful!**
 
-**Credits: Omkar Bhoir, Daksh Bari**
+**Credits: Omkar Bhoir, Daksh Bari, Aditya Ghumare**
 
 [⬆ Back to Top](#-finsync---unified-finance-management-platform)
 
