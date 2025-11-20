@@ -141,10 +141,10 @@ export function ExpenseBreakdownChart() {
       <text
         x={x}
         y={y}
-        fill="hsl(var(--foreground))"
+        fill="currentColor"
         textAnchor={x > cx ? 'start' : 'end'}
         dominantBaseline="central"
-        className="text-xs font-medium"
+        className="text-xs font-medium text-foreground"
       >
         {`${category} (${percentage}%)`}
       </text>
@@ -196,13 +196,13 @@ export function ExpenseBreakdownChart() {
         )}
         <div className="mt-4 space-y-2">
           {expenseData.map((item, index) => (
-            <div key={item.category} className="flex items-center justify-between text-sm">
+            <div key={`expense-${item.category}-${index}`} className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                 <span>{item.category}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span>₹{item.amount.toLocaleString()}</span>
+                <span>₹{Number(item.amount).toLocaleString()}</span>
                 <span className="text-muted-foreground">({item.percentage}%)</span>
               </div>
             </div>
