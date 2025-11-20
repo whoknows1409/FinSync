@@ -830,7 +830,7 @@ export default function EnhancedStockAnalysis() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground dark:text-muted-foreground">Dividend Yield</span>
-                    <span className="font-medium">{stockData.dividendYield ? `${(stockData.dividendYield * 100).toFixed(2)}%` : 'N/A'}</span>
+                    <span className="font-medium">{stockData.dividendYield ? `${stockData.dividendYield.toFixed(2)}%` : 'N/A'}</span>
                   </div>
                 </div>
                 <div className="space-y-3">
