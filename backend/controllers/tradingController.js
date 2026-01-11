@@ -468,15 +468,56 @@ exports.getTradingStats = async (req, res) => {
     const tradingAccount = await TradingAccount.findOne({ user: req.user._id });
     
     if (!tradingAccount) {
-      logger.error('Trading account not found');
-      return res.status(404).json({
-        success: false,
-        message: 'Trading account not found'
+      logger.info('Trading account not found, returning default stats');
+      return res.json({
+        success: true,
+        data: {
+          totalTrades: 0,
+          winRate: 0,
+          totalPnL: 0,
+          portfolioValue: 0,
+          bestTrade: null,
+          worstTrade: null,
+          averageHoldingTime: 0,
+          totalVolume: 0,
+          trades: []
+        }
       });
+    }
+
+    // Initialize tradingStats if missing
+    if (!tradingAccount.tradingStats) {
+      tradingAccount.tradingStats = {
+        totalTrades: 0,
+        successfulTrades: 0,
+        winRate: 0,
+        bestTrade: null,
+        worstTrade: null,
+        averageHoldingTime: 0,
+        totalVolume: 0
+      };
     }
     
     // Get all executed orders
-    const orders = tradingAccount.orders.filter(order => order.status === 'EXECUTED');
+    const orders = tradingAccount.orders ? tradingAccount.orders.filter(order => order.status === 'EXECUTED') : [];
+    
+    if (orders.length === 0) {
+      logger.info('No executed orders found, returning default stats');
+      return res.json({
+        success: true,
+        data: {
+          totalTrades: tradingAccount.tradingStats.totalTrades || 0,
+          winRate: tradingAccount.tradingStats.winRate || 0,
+          totalPnL: tradingAccount.totalPnL || 0,
+          portfolioValue: tradingAccount.totalValue || 0,
+          bestTrade: tradingAccount.tradingStats.bestTrade || null,
+          worstTrade: tradingAccount.tradingStats.worstTrade || null,
+          averageHoldingTime: tradingAccount.tradingStats.averageHoldingTime || 0,
+          totalVolume: tradingAccount.tradingStats.totalVolume || 0,
+          trades: []
+        }
+      });
+    }
     
     // Process orders to create trades
     const trades = [];
@@ -488,6 +529,8 @@ exports.getTradingStats = async (req, res) => {
     
     // Process buy orders
     for (const buyOrder of buyOrders) {
+      if (!buyOrder.symbol) continue;
+      
       if (!holdings[buyOrder.symbol]) {
         holdings[buyOrder.symbol] = {
           quantity: 0,
@@ -496,39 +539,39 @@ exports.getTradingStats = async (req, res) => {
         };
       }
       
-      holdings[buyOrder.symbol].quantity += buyOrder.quantity;
-      holdings[buyOrder.symbol].totalCost += buyOrder.executedPrice * buyOrder.quantity;
+      holdings[buyOrder.symbol].quantity += buyOrder.quantity || 0;
+      holdings[buyOrder.symbol].totalCost += (buyOrder.executedPrice || 0) * (buyOrder.quantity || 0);
       holdings[buyOrder.symbol].orders.push(buyOrder);
     }
     
     // Process sell orders and create trades
     for (const sellOrder of sellOrders) {
-      if (!holdings[sellOrder.symbol] || holdings[sellOrder.symbol].quantity === 0) {
+      if (!sellOrder.symbol || !holdings[sellOrder.symbol] || holdings[sellOrder.symbol].quantity === 0) {
         continue;
       }
       
       const holding = holdings[sellOrder.symbol];
-      let remainingQuantity = sellOrder.quantity;
+      let remainingQuantity = sellOrder.quantity || 0;
       
       // Find matching buy orders (FIFO)
       for (let i = 0; i < holding.orders.length && remainingQuantity > 0; i++) {
         const buyOrder = holding.orders[i];
-        const tradeQuantity = Math.min(remainingQuantity, buyOrder.quantity);
+        const tradeQuantity = Math.min(remainingQuantity, buyOrder.quantity || 0);
         
         // Calculate profit/loss
-        const buyValue = buyOrder.executedPrice * tradeQuantity;
-        const sellValue = sellOrder.executedPrice * tradeQuantity;
+        const buyValue = (buyOrder.executedPrice || 0) * tradeQuantity;
+        const sellValue = (sellOrder.executedPrice || 0) * tradeQuantity;
         const profitLoss = sellValue - buyValue;
-        const profitLossPercentage = (profitLoss / buyValue) * 100;
+        const profitLossPercentage = buyValue > 0 ? (profitLoss / buyValue) * 100 : 0;
         
         // Add trade
         trades.push({
           symbol: sellOrder.symbol,
           name: sellOrder.symbol,
-          buyPrice: buyOrder.executedPrice,
-          buyDate: buyOrder.executedAt,
-          sellPrice: sellOrder.executedPrice,
-          sellDate: sellOrder.executedAt,
+          buyPrice: buyOrder.executedPrice || 0,
+          buyDate: buyOrder.executedAt || new Date(),
+          sellPrice: sellOrder.executedPrice || 0,
+          sellDate: sellOrder.executedAt || new Date(),
           quantity: tradeQuantity,
           profitLoss: profitLoss,
           profitLossPercentage: profitLossPercentage,
@@ -537,12 +580,12 @@ exports.getTradingStats = async (req, res) => {
         
         // Update holding
         holding.quantity -= tradeQuantity;
-        holding.totalCost -= buyOrder.executedPrice * tradeQuantity;
-        buyOrder.quantity -= tradeQuantity;
+        holding.totalCost -= (buyOrder.executedPrice || 0) * tradeQuantity;
+        buyOrder.quantity = (buyOrder.quantity || 0) - tradeQuantity;
         remainingQuantity -= tradeQuantity;
         
         // Remove buy order if fully used
-        if (buyOrder.quantity === 0) {
+        if ((buyOrder.quantity || 0) === 0) {
           holding.orders.splice(i, 1);
           i--;
         }
@@ -553,21 +596,24 @@ exports.getTradingStats = async (req, res) => {
     for (const symbol in holdings) {
       const holding = holdings[symbol];
       if (holding.quantity > 0) {
-        const averagePrice = holding.totalCost / holding.quantity;
+        const averagePrice = holding.quantity > 0 ? holding.totalCost / holding.quantity : 0;
         
         // Get current price for the stock
         let currentPrice = averagePrice;
         
         try {
           const stockData = await stockService.getRealTimePrice(symbol);
-          currentPrice = stockData.currentPrice;
+          currentPrice = stockData.currentPrice || averagePrice;
         } catch (error) {
-          logger.error(`Error fetching current price for ${symbol}:`, error);
+          logger.error(`Error fetching current price for ${symbol}:`, error.message);
+          // Use average price as fallback
         }
         
         // Calculate unrealized P&L
         const unrealizedPnL = (currentPrice - averagePrice) * holding.quantity;
-        const unrealizedPnLPercentage = (unrealizedPnL / (averagePrice * holding.quantity)) * 100;
+        const unrealizedPnLPercentage = averagePrice > 0 && holding.quantity > 0 
+          ? (unrealizedPnL / (averagePrice * holding.quantity)) * 100 
+          : 0;
         
         trades.push({
           symbol: symbol,
@@ -591,14 +637,14 @@ exports.getTradingStats = async (req, res) => {
     
     // Prepare response
     const stats = {
-      totalTrades: tradingAccount.tradingStats.totalTrades,
-      winRate: tradingAccount.tradingStats.winRate,
+      totalTrades: tradingAccount.tradingStats.totalTrades || 0,
+      winRate: tradingAccount.tradingStats.winRate || 0,
       totalPnL: totalPnL,
-      portfolioValue: tradingAccount.totalValue,
-      bestTrade: tradingAccount.tradingStats.bestTrade,
-      worstTrade: tradingAccount.tradingStats.worstTrade,
-      averageHoldingTime: tradingAccount.tradingStats.averageHoldingTime,
-      totalVolume: tradingAccount.tradingStats.totalVolume,
+      portfolioValue: tradingAccount.totalValue || 0,
+      bestTrade: tradingAccount.tradingStats.bestTrade || null,
+      worstTrade: tradingAccount.tradingStats.worstTrade || null,
+      averageHoldingTime: tradingAccount.tradingStats.averageHoldingTime || 0,
+      totalVolume: tradingAccount.tradingStats.totalVolume || 0,
       trades: trades
     };
     
@@ -609,9 +655,11 @@ exports.getTradingStats = async (req, res) => {
     });
   } catch (error) {
     logger.error('Get trading stats error:', error);
+    console.error('Full error stack:', error.stack);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch trading stats'
+      message: 'Failed to fetch trading stats',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

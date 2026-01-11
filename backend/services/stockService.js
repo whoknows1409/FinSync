@@ -245,14 +245,17 @@ exports.getRealTimePrice = async function(symbol) {
   } catch (error) {
     logger.error('Error fetching real-time price:', error);
     
-    // If Yahoo Finance fails, return default price data with sector mapping
+    // Return cached/default price data instead of throwing
+    const defaultSector = stockSectorMap[symbol.toUpperCase()] || stockSectorMap[symbol.toUpperCase() + '.NS'] || 'Unknown';
+    
     return {
       symbol: symbol.toUpperCase(),
-      currentPrice: 100,
-      sector: stockSectorMap[symbol.toUpperCase()] || 'Unknown',
+      currentPrice: 100, // Default fallback price
+      sector: defaultSector,
       isStale: true,
       timestamp: new Date(),
-      marketState: 'CLOSED'
+      marketState: 'CLOSED',
+      error: error.message
     };
   }
 };
