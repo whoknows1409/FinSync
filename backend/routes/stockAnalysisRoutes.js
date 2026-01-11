@@ -350,10 +350,30 @@ router.post('/stock-analysis', async (req, res) => {
       return res.status(400).json({ error: 'Stock data is required' });
     }
 
+    // Check if stock is fallback data (incomplete due to API issues)
+    if (stock.isFallback || stock.currentPrice === 0 || !stock.currentPrice) {
+      console.log('Received fallback stock data, returning limited analysis');
+      return res.json({
+        recommendation: 'Hold',
+        overview: `Unable to generate detailed analysis for ${stock.name || stock.symbol} due to incomplete data. This is likely due to API rate limiting. Please try again in a few minutes.`,
+        financialHealth: 'Data unavailable - please retry later',
+        keyFactors: [
+          'Real-time stock data is temporarily unavailable',
+          'This may be due to API rate limiting',
+          'Please wait a few minutes and try again'
+        ],
+        risks: [
+          'Unable to assess risk without current market data'
+        ],
+        outlook: 'Analysis cannot be completed without current price data. Please try again later when the API is available.',
+        isLimited: true
+      });
+    }
+
     // Validate required stock fields
-    if (!stock.symbol || !stock.name || !stock.currentPrice) {
+    if (!stock.symbol || !stock.name) {
       return res.status(400).json({ 
-        error: 'Invalid stock data. Required fields: symbol, name, currentPrice',
+        error: 'Invalid stock data. Required fields: symbol, name',
         received: stock
       });
     }
