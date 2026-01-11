@@ -52,17 +52,39 @@ export default function StockAnalysisPage() {
     setAnalysis(null)
     
     try {
-      const response = await fetch(`/api/stocks-analysis/stock-data?symbol=${symbol}`)
+      const response = await fetch(`/api/stocks-analysis/stock-data?symbol=${symbol}&t=${Date.now()}&r=${Math.random()}`)
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch stock data')
+        const errorData = await response.json().catch(() => ({}))
+        
+        // Handle specific error codes
+        if (response.status === 429) {
+          throw new Error('Too many requests. Please wait a moment and try again.')
+        }
+        if (response.status === 404) {
+          throw new Error(`Stock symbol "${symbol}" not found. Please check the symbol and try again.`)
+        }
+        if (response.status === 408) {
+          throw new Error('Request timed out. Please check your internet connection and try again.')
+        }
+        
+        throw new Error(errorData.error || 'Failed to fetch stock data. Please try again.')
       }
+      
       const data = await response.json()
+      
+      // Validate that we received valid data
+      if (!data || !data.symbol) {
+        throw new Error('Received invalid stock data. Please try again.')
+      }
+      
       setStockData(data)
       
       // Fetch analysis after getting stock data
       fetchAnalysis(data)
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Error fetching stock data'
+      console.error('Error fetching stock analysis data:', err)
+      const message = err instanceof Error ? err.message : 'Error fetching stock data. Please try again.'
       setError(message)
     } finally {
       setLoading(false)
@@ -147,9 +169,24 @@ export default function StockAnalysisPage() {
       </Card>
 
       {error && (
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900">
           <CardContent className="p-4">
-            <p className="text-red-600">{error}</p>
+            <div className="flex items-start gap-3">
+              <div className="flex-1">
+                <p className="text-red-600 dark:text-red-400 font-medium">Error</p>
+                <p className="text-red-700 dark:text-red-300 text-sm mt-1">{error}</p>
+              </div>
+              {searchQuery && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => fetchStockData(searchQuery.trim().toUpperCase())}
+                  className="border-red-300 hover:bg-red-100 dark:border-red-800 dark:hover:bg-red-900/20"
+                >
+                  Retry
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
