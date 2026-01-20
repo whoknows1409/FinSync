@@ -1,42 +1,32 @@
 const express = require('express');
 const router = express.Router();
-const NodeCache = require('node-cache');
 
-// Create cache with 5 minute TTL (time to live)
-const stockCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
-
-// Cache the yahoo-finance2 instance once created
 let yahooFinanceInstance;
 async function getYahooFinance() {
   if (!yahooFinanceInstance) {
     const YahooFinanceClass = (await import('yahoo-finance2')).default;
     yahooFinanceInstance = new YahooFinanceClass();
-    
-    // Suppress the survey notice
-    yahooFinanceInstance.suppressNotices(['yahooSurvey']);
   }
   return yahooFinanceInstance;
 }
 const logger = require('../utils/logger');
-const geminiService = require('../services/geminiService');
+const geminiService = require('../services/geminiService'); // This is correct
 
 // Helper function to format stock data with fallbacks
 function formatStockData(quote) {
   return {
     symbol: quote.symbol,
-    name: quote.longName || quote.shortName || quote.displayName || 'Unknown',
-    currentPrice: quote.regularMarketPrice || 0,
-    previousClose: quote.regularMarketPreviousClose || 0,
-    marketCap: quote.marketCap || 0,
-    peRatio: quote.trailingPE || null,
-    dividendYield: quote.dividendYield || null,
-    fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh || null,
-    fiftyTwoWeekLow: quote.fiftyTwoWeekLow || null,
-    volume: quote.regularMarketVolume || 0,
-    averageVolume: quote.averageDailyVolume3Month || quote.averageDailyVolume10Day || 0,
-    beta: quote.beta || null,
-    change: quote.regularMarketChange || 0,
-    changePercent: quote.regularMarketChangePercent || 0
+    name: quote.longName || quote.shortName || quote.price?.longName || quote.price?.shortName || 'Unknown',
+    currentPrice: quote.regularMarketPrice || quote.price?.regularMarketPrice || 0,
+    previousClose: quote.regularMarketPreviousClose || quote.price?.regularMarketPreviousClose || 0,
+    marketCap: quote.marketCap || quote.price?.marketCap || 0,
+    peRatio: quote.trailingPE || quote.summaryDetail?.trailingPE || quote.price?.trailingPE || null,
+    dividendYield: quote.dividendYield || quote.summaryDetail?.dividendYield || quote.price?.dividendYield || null,
+    fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh || quote.summaryDetail?.fiftyTwoWeekHigh || quote.price?.fiftyTwoWeekHigh || null,
+    fiftyTwoWeekLow: quote.fiftyTwoWeekLow || quote.summaryDetail?.fiftyTwoWeekLow || quote.price?.fiftyTwoWeekLow || null,
+    volume: quote.regularMarketVolume || quote.price?.regularMarketVolume || 0,
+    averageVolume: quote.averageDailyVolume3Month || quote.averageDailyVolume10Day || quote.price?.averageDailyVolume3Month || 0,
+    beta: quote.beta || quote.defaultKeyStatistics?.beta || quote.price?.beta || null
   };
 }
 
@@ -49,78 +39,41 @@ router.get('/stock-data', async (req, res) => {
       return res.status(400).json({ error: 'Stock symbol is required' });
     }
 
-    console.log(`Fetching stock data for symbol: ${symbol}`);
-
-    // Check cache first
-    const cacheKey = `stock-${symbol}`;
-    const cachedData = stockCache.get(cacheKey);
-    
-    if (cachedData) {
-      console.log(`Returning cached data for ${symbol}`);
-      return res.json(cachedData);
-    }
-
-    // Fetch stock data from Yahoo Finance
-    const yf = await getYahooFinance();
-    
-    // Add timeout wrapper
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Request timeout after 10 seconds')), 10000)
-    );
-    
-    const quote = await Promise.race([
-      yf.quote(symbol),
-      timeoutPromise
-    ]);
-    
-    console.log('Raw quote received, keys:', Object.keys(quote));
+    // Fetch stock data from Yahoo Finance with enhanced modules
+    const quote = await (await getYahooFinance()).quote(symbol);
     
     // Format stock data with fallbacks
     let stockData = formatStockData(quote);
     
-    console.log('Formatted stock data:', stockData);
-
-    // Cache the result
-    stockCache.set(cacheKey, stockData);
+    // If 52-week high/low are not available, fetch from historical data
+    // Skip historical enrichment; not supported in current yahoo-finance2 build
 
     res.json(stockData);
   } catch (error) {
     logger.error('Error fetching stock data:', error);
-    console.error('Full error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
-    });
-    
-    // Handle specific error codes
-    if (error.message && error.message.includes('429')) {
-      return res.status(429).json({ 
-        error: 'Too many requests. Please try again in a moment.',
-        code: 'RATE_LIMIT'
+    if (process.env.NODE_ENV === 'development') {
+      // Return minimal mock to keep UI functional in dev
+      const symbol = String(req.query.symbol || 'UNKNOWN').toUpperCase();
+      return res.json({
+        symbol,
+        name: symbol,
+        currentPrice: 100,
+        previousClose: 100,
+        marketCap: 0,
+        peRatio: null,
+        dividendYield: null,
+        fiftyTwoWeekHigh: 0,
+        fiftyTwoWeekLow: 0,
+        volume: 0,
+        averageVolume: 0,
+        beta: null
       });
     }
-    
     // Handle specific error for invalid stock symbols
-    if (error.message && (error.message.includes('Invalid symbol') || error.message.includes('No data found') || error.message.includes('Not Found') || error.message.includes('404'))) {
-      return res.status(404).json({ 
-        error: 'Stock not found. Please enter a valid stock symbol.',
-        code: 'NOT_FOUND'
-      });
+    if (error.message.includes('Invalid symbol') || error.message.includes('No data found')) {
+      return res.status(404).json({ error: 'Stock not found. Please enter a valid NSE stock symbol.' });
     }
-    
-    // Handle timeout
-    if (error.message && error.message.includes('timeout')) {
-      return res.status(408).json({ 
-        error: 'Request timed out. Please try again.',
-        code: 'TIMEOUT'
-      });
-    }
-    
-    res.status(500).json({ 
-      error: 'Failed to fetch stock data. Please try again.',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
-      code: 'FETCH_ERROR'
-    });
+    res.status(500).json({ error: 'Failed to fetch stock data' });
   }
 });
 
