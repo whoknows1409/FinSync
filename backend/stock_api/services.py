@@ -1,3 +1,4 @@
+import yfinance as yf
 import google.generativeai as genai
 from typing import List, Dict, Any
 import pandas as pd
@@ -5,15 +6,11 @@ import numpy as np
 from datetime import datetime, timedelta
 import requests
 import json
-import os
-import sys
 from io import StringIO
 from config import GEMINI_API_KEY
 from models import StockData, HistoricalData, StockSummary
-
-# Add parent directory to path to import alpha_vantage_service
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.alpha_vantage_service import alpha_vantage_service
+import yfinance as yf
+import os
 
 # Configure Gemini
 genai.configure(api_key=GEMINI_API_KEY)

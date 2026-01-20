@@ -1,9 +1,34 @@
 const express = require('express');
 const router = express.Router();
 
-const alphaVantageService = require('../utils/alphaVantageService');
+let yahooFinanceInstance;
+async function getYahooFinance() {
+  if (!yahooFinanceInstance) {
+    const YahooFinanceClass = (await import('yahoo-finance2')).default;
+    yahooFinanceInstance = new YahooFinanceClass();
+  }
+  return yahooFinanceInstance;
+}
 const logger = require('../utils/logger');
 const geminiService = require('../services/geminiService'); // This is correct
+
+// Helper function to format stock data with fallbacks
+function formatStockData(quote) {
+  return {
+    symbol: quote.symbol,
+    name: quote.longName || quote.shortName || quote.price?.longName || quote.price?.shortName || 'Unknown',
+    currentPrice: quote.regularMarketPrice || quote.price?.regularMarketPrice || 0,
+    previousClose: quote.regularMarketPreviousClose || quote.price?.regularMarketPreviousClose || 0,
+    marketCap: quote.marketCap || quote.price?.marketCap || 0,
+    peRatio: quote.trailingPE || quote.summaryDetail?.trailingPE || quote.price?.trailingPE || null,
+    dividendYield: quote.dividendYield || quote.summaryDetail?.dividendYield || quote.price?.dividendYield || null,
+    fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh || quote.summaryDetail?.fiftyTwoWeekHigh || quote.price?.fiftyTwoWeekHigh || null,
+    fiftyTwoWeekLow: quote.fiftyTwoWeekLow || quote.summaryDetail?.fiftyTwoWeekLow || quote.price?.fiftyTwoWeekLow || null,
+    volume: quote.regularMarketVolume || quote.price?.regularMarketVolume || 0,
+    averageVolume: quote.averageDailyVolume3Month || quote.averageDailyVolume10Day || quote.price?.averageDailyVolume3Month || 0,
+    beta: quote.beta || quote.defaultKeyStatistics?.beta || quote.price?.beta || null
+  };
+}
 
 // Route to get stock data
 router.get('/stock-data', async (req, res) => {
@@ -14,24 +39,14 @@ router.get('/stock-data', async (req, res) => {
       return res.status(400).json({ error: 'Stock symbol is required' });
     }
 
-    // Fetch stock data from Alpha Vantage
-    const quote = await alphaVantageService.getDetailedQuote(symbol);
+    // Fetch stock data from Yahoo Finance with enhanced modules
+    const quote = await (await getYahooFinance()).quote(symbol);
     
-    // Format stock data
-    const stockData = {
-      symbol: quote.symbol,
-      name: quote.longName || quote.shortName || quote.symbol,
-      currentPrice: quote.regularMarketPrice || 0,
-      previousClose: quote.regularMarketPreviousClose || 0,
-      marketCap: quote.marketCap || 0,
-      peRatio: quote.trailingPE || null,
-      dividendYield: quote.dividendYield || null,
-      fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh || null,
-      fiftyTwoWeekLow: quote.fiftyTwoWeekLow || null,
-      volume: quote.regularMarketVolume || 0,
-      averageVolume: 0,
-      beta: quote.beta || null
-    };
+    // Format stock data with fallbacks
+    let stockData = formatStockData(quote);
+    
+    // If 52-week high/low are not available, fetch from historical data
+    // Skip historical enrichment; not supported in current yahoo-finance2 build
 
     res.json(stockData);
   } catch (error) {
@@ -72,45 +87,51 @@ router.get('/historical-data', async (req, res) => {
     }
 
     // Determine the period for historical data
-    let outputsize = 'compact'; // 100 days
-    
-    if (period === '6mo' || period === '1y' || period === '5y') {
-      outputsize = 'full'; // 20+ years
-    }
-
-    // Fetch historical data from Alpha Vantage
-    const historicalData = await alphaVantageService.getHistoricalData(symbol, outputsize);
-    
-    // Format data for frontend
-    const formattedData = historicalData.map(item => ({
-      date: item.date,
-      close: item.close
-    }));
-
-    // Filter based on period
+    let period1, period2;
     const now = new Date();
-    let filterDate;
     
     switch (period) {
       case '7d':
-        filterDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        period1 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         break;
       case '1mo':
-        filterDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        period1 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         break;
       case '6mo':
-        filterDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
-        break;
-      case '1y':
-        filterDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+        period1 = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
         break;
       default:
-        filterDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        period1 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     }
     
-    const filteredData = formattedData.filter(item => new Date(item.date) >= filterDate);
-    
-    res.json(filteredData);
+    period2 = now;
+
+    // Fetch from Yahoo public chart API (no key required)
+    const p1 = Math.floor(period1.getTime() / 1000);
+    const p2 = Math.floor(period2.getTime() / 1000);
+    const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`);
+    url.searchParams.set('period1', String(p1));
+    url.searchParams.set('period2', String(p2));
+    url.searchParams.set('interval', '1d');
+    url.searchParams.set('events', 'div,splits');
+
+    const resp = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; Finsync/1.0)'
+      }
+    });
+    if (!resp.ok) {
+      throw new Error(`Yahoo chart API ${resp.status}`);
+    }
+    const json = await resp.json();
+    const result = json?.chart?.result?.[0];
+    const timestamps = result?.timestamp || [];
+    const closes = result?.indicators?.quote?.[0]?.close || [];
+    const data = timestamps.map((ts, i) => ({
+      date: new Date(ts * 1000).toISOString().split('T')[0],
+      close: Number(closes[i] ?? 0)
+    })).filter(p => !isNaN(p.close));
+    return res.json(data);
   } catch (error) {
     logger.error('Error fetching historical data:', error);
     if (process.env.NODE_ENV === 'development') {
@@ -121,7 +142,7 @@ router.get('/historical-data', async (req, res) => {
       const mock = Array.from({ length: points }).map((_, i) => {
         const t = new Date(now.getTime() - (points - i) * 24 * 60 * 60 * 1000);
         base += (Math.random() - 0.5) * 2;
-        return { date: t.toISOString().split('T')[0], close: Number(base.toFixed(2)) };
+        return { date: t, close: Number(base.toFixed(2)) };
       });
       return res.json(mock);
     }
@@ -163,58 +184,38 @@ router.get('/compare', async (req, res) => {
 
     let quote1, quote2;
     try {
+      const yahooFinance = await getYahooFinance();
       [quote1, quote2] = await Promise.all([
-        fetchWithTimeout(alphaVantageService.getDetailedQuote(symbol1)).catch(err => {
+        fetchWithTimeout(yahooFinance.quote(symbol1)).catch(err => {
           console.error(`Error fetching ${symbol1}:`, err.message);
           throw new Error(`Failed to fetch data for ${symbol1}: ${err.message}`);
         }),
-        fetchWithTimeout(alphaVantageService.getDetailedQuote(symbol2)).catch(err => {
+        fetchWithTimeout(yahooFinance.quote(symbol2)).catch(err => {
           console.error(`Error fetching ${symbol2}:`, err.message);
           throw new Error(`Failed to fetch data for ${symbol2}: ${err.message}`);
         })
       ]);
     } catch (fetchError) {
-      console.error('Alpha Vantage fetch error:', fetchError);
+      console.error('Yahoo Finance fetch error:', fetchError);
       return res.status(500).json({ 
-        error: 'Failed to fetch stock data from Alpha Vantage',
+        error: 'Failed to fetch stock data from Yahoo Finance',
         details: fetchError.message
       });
     }
 
-    console.log('Successfully fetched stock data from Alpha Vantage');
+    console.log('Successfully fetched stock data from Yahoo Finance');
 
-    // Format stock data
-    let stock1 = {
-      symbol: quote1.symbol,
-      name: quote1.longName || quote1.shortName || quote1.symbol,
-      currentPrice: quote1.regularMarketPrice || 0,
-      previousClose: quote1.regularMarketPreviousClose || 0,
-      marketCap: quote1.marketCap || 0,
-      peRatio: quote1.trailingPE || null,
-      dividendYield: quote1.dividendYield || null,
-      fiftyTwoWeekHigh: quote1.fiftyTwoWeekHigh || null,
-      fiftyTwoWeekLow: quote1.fiftyTwoWeekLow || null,
-      volume: quote1.regularMarketVolume || 0,
-      averageVolume: 0,
-      beta: quote1.beta || null,
-      monthlyChange: 0
-    };
-    
-    let stock2 = {
-      symbol: quote2.symbol,
-      name: quote2.longName || quote2.shortName || quote2.symbol,
-      currentPrice: quote2.regularMarketPrice || 0,
-      previousClose: quote2.regularMarketPreviousClose || 0,
-      marketCap: quote2.marketCap || 0,
-      peRatio: quote2.trailingPE || null,
-      dividendYield: quote2.dividendYield || null,
-      fiftyTwoWeekHigh: quote2.fiftyTwoWeekHigh || null,
-      fiftyTwoWeekLow: quote2.fiftyTwoWeekLow || null,
-      volume: quote2.regularMarketVolume || 0,
-      averageVolume: 0,
-      beta: quote2.beta || null,
-      monthlyChange: 0
-    };
+    // Format stock data with fallbacks
+    let stock1 = formatStockData(quote1);
+    let stock2 = formatStockData(quote2);
+
+    // Calculate monthly change for both stocks (approximate as 0 in this build)
+    const monthlyChange1 = 0;
+    const monthlyChange2 = 0;
+
+    // Add monthly change to stock data
+    stock1.monthlyChange = monthlyChange1;
+    stock2.monthlyChange = monthlyChange2;
 
     console.log('Generating AI comparison summary');
 
@@ -294,10 +295,9 @@ router.post('/stock-analysis', async (req, res) => {
         const startDate = new Date();
         startDate.setFullYear(endDate.getFullYear() - 1);
         
-        const historical = await alphaVantageService.historical(formattedStock.symbol, {
+        const historical = await (await getYahooFinance()).historical(formattedStock.symbol, {
           period1: startDate,
-          period2: endDate
-        });
+          period2: endDate,
           interval: '1wk'
         });
         

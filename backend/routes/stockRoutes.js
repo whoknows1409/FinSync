@@ -1,7 +1,14 @@
 // backend/routes/stockRoutes.js
 const express = require('express');
 const router = express.Router();
-const alphaVantageService = require('../utils/alphaVantageService');
+let yahooFinanceInstance;
+async function getYahooFinance() {
+  if (!yahooFinanceInstance) {
+    const YahooFinanceClass = (await import('yahoo-finance2')).default;
+    yahooFinanceInstance = new YahooFinanceClass();
+  }
+  return yahooFinanceInstance;
+}
 const logger = require('../utils/logger');
 const Stock = require('../models/Stock');
 
@@ -17,20 +24,20 @@ router.get('/test', (req, res) => {
 // Health check endpoint
 router.get('/health', async (req, res) => {
   try {
-    // Test Alpha Vantage connectivity
-    await alphaVantageService.quote('RELIANCE.NS');
+    // Test Yahoo Finance connectivity
+    await (await getYahooFinance()).quote('RELIANCE.NS');
     
     res.json({
       success: true,
       message: 'Stock API is healthy',
-      alphaVantage: 'connected',
+      yahooFinance: 'connected',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
     res.status(503).json({
       success: false,
       message: 'Stock API is unhealthy',
-      alphaVantage: 'disconnected',
+      yahooFinance: 'disconnected',
       error: error.message,
       timestamp: new Date().toISOString()
     });
@@ -68,7 +75,7 @@ router.get('/search', async (req, res) => {
       });
     }
 
-    // If not found in database, fetch from Alpha Vantage
+    // If not found in database, fetch from Yahoo Finance
     let symbol = q.toUpperCase();
     
     // Add .NS suffix for Indian stocks if not present
@@ -77,7 +84,7 @@ router.get('/search', async (req, res) => {
       symbol += '.NS';
     }
 
-    logger.info(`Fetching from Alpha Vantage: ${symbol}`);
+    logger.info(`Fetching from Yahoo Finance: ${symbol}`);
     
     // Add retry logic
     let quote = null;
@@ -86,7 +93,7 @@ router.get('/search', async (req, res) => {
     
     while (retryCount < maxRetries) {
       try {
-        quote = await alphaVantageService.getDetailedQuote(symbol);
+        quote = await (await getYahooFinance()).quote(symbol);
         break;
       } catch (retryError) {
         retryCount++;
@@ -183,7 +190,7 @@ router.get('/:symbol', async (req, res) => {
         stockSymbol += '.NS';
       }
 
-      logger.info(`Fetching from Alpha Vantage: ${stockSymbol}`);
+      logger.info(`Fetching from Yahoo Finance: ${stockSymbol}`);
       
       // Add retry logic
       let quote = null;
@@ -192,7 +199,7 @@ router.get('/:symbol', async (req, res) => {
       
       while (retryCount < maxRetries) {
         try {
-          quote = await alphaVantageService.getDetailedQuote(stockSymbol);
+          quote = await (await getYahooFinance()).quote(stockSymbol);
           break;
         } catch (retryError) {
           retryCount++;
@@ -283,7 +290,7 @@ router.get('/:symbol/price', async (req, res) => {
       stockSymbol += '.NS';
     }
 
-    logger.info(`Fetching price from Alpha Vantage: ${stockSymbol}`);
+    logger.info(`Fetching price from Yahoo Finance: ${stockSymbol}`);
     
     // Add retry logic
     let quote = null;
@@ -292,7 +299,7 @@ router.get('/:symbol/price', async (req, res) => {
     
     while (retryCount < maxRetries) {
       try {
-        quote = await alphaVantageService.getDetailedQuote(stockSymbol);
+        quote = await (await getYahooFinance()).quote(stockSymbol);
         break;
       } catch (retryError) {
         retryCount++;
@@ -568,7 +575,7 @@ router.get('/:symbol/real-time', async (req, res) => {
     
     while (retryCount < maxRetries) {
       try {
-        quote = await alphaVantageService.getDetailedQuote(stockSymbol);
+        quote = await (await getYahooFinance()).quote(stockSymbol);
         break;
       } catch (retryError) {
         retryCount++;

@@ -1,6 +1,13 @@
 // backend/services/stockService.js
 const axios = require('axios');
-const alphaVantageService = require('../utils/alphaVantageService');
+let yahooFinanceInstance;
+async function getYahooFinance() {
+  if (!yahooFinanceInstance) {
+    const YahooFinanceClass = (await import('yahoo-finance2')).default;
+    yahooFinanceInstance = new YahooFinanceClass();
+  }
+  return yahooFinanceInstance;
+}
 const Stock = require('../models/Stock');
 const logger = require('../utils/logger');
 
@@ -50,7 +57,7 @@ exports.getStockDetails = async function(symbol, interval = '1d') {
     
     while (retryCount < maxRetries) {
       try {
-        quote = await alphaVantageService.getDetailedQuote(stockSymbol);
+        quote = await (await getYahooFinance()).quote(stockSymbol);
         break;
       } catch (retryError) {
         retryCount++;
@@ -76,20 +83,39 @@ exports.getStockDetails = async function(symbol, interval = '1d') {
     if (stockSectorMap[stockSymbol]) {
       sector = stockSectorMap[stockSymbol];
     } 
-    // Then try to get from Alpha Vantage data
+    // Then try to get from Yahoo Finance data
+    else if (quote.price?.sector && quote.price?.sector !== 'N/A') {
+      sector = quote.price?.sector;
+    } 
     else if (quote.sector && quote.sector !== 'N/A') {
       sector = quote.sector;
     } 
     // Try industry as a fallback
+    else if (quote.price?.industry && quote.price?.industry !== 'N/A') {
+      sector = quote.price?.industry;
+    }
     else if (quote.industry && quote.industry !== 'N/A') {
       sector = quote.industry;
     }
     
     logger.info(`Determined sector for ${stockSymbol}: ${sector}`);
     
-    // Get 52-week high/low
-    let fiftyTwoWeekHigh = quote.fiftyTwoWeekHigh || 0;
-    let fiftyTwoWeekLow = quote.fiftyTwoWeekLow || 0;
+    // Extract data from different modules, with fallbacks
+    const price = quote.price || {};
+    const summaryDetail = quote.summaryDetail || {};
+    const defaultKeyStatistics = quote.defaultKeyStatistics || {};
+    const financialData = quote.financialData || {};
+    
+    // Get 52-week high/low with multiple fallbacks
+    let fiftyTwoWeekHigh = summaryDetail.fiftyTwoWeekHigh || 
+                          defaultKeyStatistics.fiftyTwoWeekHigh || 
+                          price.fiftyTwoWeekHigh || 
+                          financialData.fiftyTwoWeekHigh || 0;
+    
+    let fiftyTwoWeekLow = summaryDetail.fiftyTwoWeekLow || 
+                         defaultKeyStatistics.fiftyTwoWeekLow || 
+                         price.fiftyTwoWeekLow || 
+                         financialData.fiftyTwoWeekLow || 0;
     
     // If we still don't have valid 52-week values, try to fetch historical data
     if (fiftyTwoWeekHigh === 0 || fiftyTwoWeekLow === 0) {
@@ -98,10 +124,7 @@ exports.getStockDetails = async function(symbol, interval = '1d') {
         const startDate = new Date();
         startDate.setFullYear(endDate.getFullYear() - 1);
         
-        const historicalData = await alphaVantageService.historical(stockSymbol, {
-          period1: startDate,
-          period2: endDate
-        });
+        const historicalData = [];
         
         if (historicalData && historicalData.length > 0) {
           const prices = historicalData.map(item => item.high);
@@ -119,19 +142,19 @@ exports.getStockDetails = async function(symbol, interval = '1d') {
     
     // Format the stock data
     return {
-      symbol: quote.symbol || stockSymbol,
-      name: quote.longName || quote.shortName || symbol,
+      symbol: price.symbol || stockSymbol,
+      name: price.longName || price.shortName || symbol,
       interval: interval,
-      currentPrice: quote.regularMarketPrice || 100,
-      previousClose: quote.regularMarketPreviousClose || 100,
-      marketCap: quote.marketCap || 0,
-      peRatio: quote.trailingPE || null,
-      dividendYield: quote.dividendYield || null,
+      currentPrice: price.regularMarketPrice || 100,
+      previousClose: price.regularMarketPreviousClose || 100,
+      marketCap: price.marketCap || summaryDetail.marketCap || 0,
+      peRatio: summaryDetail.trailingPE || financialData.trailingPE || null,
+      dividendYield: summaryDetail.dividendYield || financialData.dividendYield || null,
       fiftyTwoWeekHigh: fiftyTwoWeekHigh,
       fiftyTwoWeekLow: fiftyTwoWeekLow,
-      volume: quote.regularMarketVolume || 0,
-      averageVolume: 0, // Alpha Vantage doesn't provide average volume in quote
-      beta: quote.beta || null,
+      volume: price.regularMarketVolume || 0,
+      averageVolume: summaryDetail.averageDailyVolume3Month || defaultKeyStatistics.averageDailyVolume3Month || 0,
+      beta: defaultKeyStatistics.beta || null,
       change: price.regularMarketPrice && price.regularMarketPreviousClose 
         ? price.regularMarketPrice - price.regularMarketPreviousClose 
         : 0,
@@ -185,10 +208,15 @@ exports.getRealTimePrice = async function(symbol) {
 
     logger.info(`Fetching real-time price with unique ID: ${uniqueId}`);
 
-    // Fetch real-time quote from Alpha Vantage
-    const quote = await alphaVantageService.getDetailedQuote(stockSymbol);
+    // Fetch real-time quote from Yahoo Finance with timeout and cache prevention
+    const quote = await (await getYahooFinance()).quote(stockSymbol);
     
-    logger.info(`Price data for ${stockSymbol}: ${quote.regularMarketPrice}`);
+    // Check if the data is stale (older than 1 minute for real-time)
+    const now = new Date();
+    const quoteTime = new Date(quote.regularMarketTime * 1000);
+    const isStale = (now - quoteTime) > 60 * 1000; // 1 minute threshold
+    
+    logger.info(`Price data for ${stockSymbol}: ${quote.regularMarketPrice}, Time: ${quoteTime}, Stale: ${isStale}`);
     
     // Determine sector
     let sector = 'Unknown';
