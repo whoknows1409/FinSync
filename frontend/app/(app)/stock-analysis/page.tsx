@@ -84,8 +84,12 @@ export default function StockAnalysisPage() {
       
       setStockData(data)
       
-      // Always try to fetch analysis - backend will handle fallback data gracefully
-      fetchAnalysis(data)
+      // Only fetch analysis if we have real data (not fallback)
+      if (!data.isFallback && data.currentPrice > 0) {
+        fetchAnalysis(data)
+      } else if (data.isFallback) {
+        setError('Unable to generate AI analysis due to incomplete stock data. Please try again later.')
+      }
     } catch (err: unknown) {
       console.error('Error fetching stock analysis data:', err)
       const message = err instanceof Error ? err.message : 'Error fetching stock data. Please try again.'
@@ -106,27 +110,14 @@ export default function StockAnalysisPage() {
       })
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('AI Analysis Error Response:', errorData)
-        throw new Error(`API Error (${response.status}): ${JSON.stringify(errorData)}`)
+        throw new Error('Failed to generate analysis')
       }
       
       const data = await response.json()
-      
-      // Check if it's a limited analysis
-      if (data.isLimited) {
-        setError(data.overview || 'Limited analysis available due to incomplete data')
-      }
-      
       setAnalysis(data)
     } catch (err: unknown) {
-      console.error('Error fetching AI analysis:', err)
       const message = err instanceof Error ? err.message : 'Error generating analysis'
-      
-      // Don't show error if we already showed one for the stock data
-      if (!error) {
-        setError(message)
-      }
+      setError(message)
     }
   }
 
@@ -277,22 +268,11 @@ export default function StockAnalysisPage() {
       {analysis && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Brain className="h-5 w-5" />
-                Gemini AI Analysis
-              </CardTitle>
-              {(analysis as any).isLimited && (
-                <Badge variant="outline" className="text-yellow-600 border-yellow-600">
-                  Limited Analysis
-                </Badge>
-              )}
-            </div>
-            <CardDescription>
-              {(analysis as any).isLimited 
-                ? 'Limited analysis due to incomplete data' 
-                : 'AI-powered financial insights'}
-            </CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <Brain className="h-5 w-5" />
+              Gemini AI Analysis
+            </CardTitle>
+            <CardDescription>AI-powered financial insights</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
