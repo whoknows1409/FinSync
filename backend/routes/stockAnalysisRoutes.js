@@ -298,6 +298,8 @@ router.post('/stock-analysis', async (req, res) => {
           period1: startDate,
           period2: endDate
         });
+          interval: '1wk'
+        });
         
         if (historical && historical.length > 0) {
           const prices = historical.map(item => item.high);
