@@ -2,14 +2,7 @@
 const axios = require('axios');
 const Stock = require('../models/Stock');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-let yahooFinanceInstance;
-async function getYahooFinance() {
-  if (!yahooFinanceInstance) {
-    const YahooFinanceClass = (await import('yahoo-finance2')).default;
-    yahooFinanceInstance = new YahooFinanceClass();
-  }
-  return yahooFinanceInstance;
-}
+const alphaVantageService = require('../utils/alphaVantageService');
 const logger = require('../utils/logger');
 
 // Initialize Gemini AI
@@ -106,7 +99,7 @@ async function fetchStockFromYahoo(symbol) {
     stockSymbol += '.NS';
   }
 
-  logger.info(`Fetching from Yahoo Finance: ${stockSymbol}`);
+  logger.info(`Fetching from Alpha Vantage: ${stockSymbol}`);
   
   // Add retry logic
   let quote = null;
@@ -115,7 +108,7 @@ async function fetchStockFromYahoo(symbol) {
   
   while (retryCount < maxRetries) {
     try {
-      quote = await (await getYahooFinance()).quote(stockSymbol);
+      quote = await alphaVantageService.getDetailedQuote(stockSymbol);
       break;
     } catch (retryError) {
       retryCount++;
@@ -133,29 +126,26 @@ async function fetchStockFromYahoo(symbol) {
   if (!quote) {
     throw new Error('Failed to fetch stock data after retries');
   }
-
-  const price = quote.price || {};
-  const summaryDetail = quote.summaryDetail || {};
   
   return {
-    symbol: price.symbol || stockSymbol,
-    name: price.longName || price.shortName || symbol,
+    symbol: quote.symbol || stockSymbol,
+    name: quote.longName || quote.shortName || symbol,
     interval: '1d',
-    currentPrice: price.regularMarketPrice || 100,
-    previousClose: price.regularMarketPreviousClose || 100,
-    change: price.regularMarketPrice && price.regularMarketPreviousClose 
-      ? price.regularMarketPrice - price.regularMarketPreviousClose 
+    currentPrice: quote.regularMarketPrice || 100,
+    previousClose: quote.regularMarketPreviousClose || 100,
+    change: quote.regularMarketPrice && quote.regularMarketPreviousClose 
+      ? quote.regularMarketPrice - quote.regularMarketPreviousClose 
       : 0,
-    changePercent: price.regularMarketPrice && price.regularMarketPreviousClose 
-      ? ((price.regularMarketPrice - price.regularMarketPreviousClose) / price.regularMarketPreviousClose) * 100 
+    changePercent: quote.regularMarketPrice && quote.regularMarketPreviousClose 
+      ? ((quote.regularMarketPrice - quote.regularMarketPreviousClose) / quote.regularMarketPreviousClose) * 100 
       : 0,
-    volume: price.regularMarketVolume || 0,
-    marketCap: price.marketCap || 0,
-    peRatio: summaryDetail.trailingPE || null,
-    dividendYield: summaryDetail.dividendYield || null,
-    fiftyTwoWeekHigh: summaryDetail.fiftyTwoWeekHigh || 0,
-    fiftyTwoWeekLow: summaryDetail.fiftyTwoWeekLow || 0,
-    sector: price.sector || 'Unknown',
+    volume: quote.regularMarketVolume || 0,
+    marketCap: quote.marketCap || 0,
+    peRatio: quote.trailingPE || null,
+    dividendYield: quote.dividendYield || null,
+    fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh || 0,
+    fiftyTwoWeekLow: quote.fiftyTwoWeekLow || 0,
+    sector: quote.sector || 'Unknown',
     lastUpdated: new Date()
   };
 }
@@ -230,12 +220,11 @@ exports.getHistoricalData = async (req, res) => {
     try {
       const queryOptions = {
         period1,
-        period2,
-        interval: interval,
+        period2
       };
       
       const historical = await Promise.race([
-        (await getYahooFinance()).historical(stockSymbol, queryOptions),
+        alphaVantageService.historical(stockSymbol, queryOptions),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Historical data request timeout')), 15000)
         )

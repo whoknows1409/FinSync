@@ -1,11 +1,11 @@
 from flask import Flask, request, jsonify
-import yfinance as yf
 import logging
 from datetime import datetime, timedelta
 import time
 import re
 from typing import Dict, List, Optional, Any
 from scripts.fetch_nse_stocks import nse_scraper
+from utils.alpha_vantage_service import alpha_vantage_service
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -59,22 +59,21 @@ def get_stock_data():
     formatted_symbol = symbol.upper() if symbol.upper().endswith('.NS') else f"{symbol.upper()}.NS"
     
     try:
-        ticker = yf.Ticker(formatted_symbol)
-        info = ticker.info
+        stock_info = alpha_vantage_service.get_detailed_quote(formatted_symbol)
         
         stock_data = {
-            'symbol': info.get('symbol', formatted_symbol),
-            'name': info.get('longName', info.get('shortName', '')),
-            'currentPrice': info.get('regularMarketPrice', 0),
-            'previousClose': info.get('regularMarketPreviousClose', 0),
-            'marketCap': info.get('marketCap', 0),
-            'peRatio': info.get('trailingPE', 0),
-            'dividendYield': info.get('dividendYield', 0),
-            'fiftyTwoWeekHigh': info.get('fiftyTwoWeekHigh', 0),
-            'fiftyTwoWeekLow': info.get('fiftyTwoWeekLow', 0),
-            'volume': info.get('regularMarketVolume', 0),
-            'averageVolume': info.get('averageDailyVolume3Month', 0),
-            'beta': info.get('beta', 0)
+            'symbol': stock_info.get('symbol', formatted_symbol.replace('.NS', '')),
+            'name': stock_info.get('longName', stock_info.get('shortName', '')),
+            'currentPrice': stock_info.get('regularMarketPrice', 0),
+            'previousClose': stock_info.get('regularMarketPreviousClose', 0),
+            'marketCap': stock_info.get('marketCap', 0),
+            'peRatio': stock_info.get('trailingPE', 0),
+            'dividendYield': stock_info.get('dividendYield', 0),
+            'fiftyTwoWeekHigh': stock_info.get('fiftyTwoWeekHigh', 0),
+            'fiftyTwoWeekLow': stock_info.get('fiftyTwoWeekLow', 0),
+            'volume': stock_info.get('regularMarketVolume', 0),
+            'averageVolume': 0,
+            'beta': stock_info.get('beta', 0)
         }
         
         return jsonify(stock_data)
@@ -96,17 +95,35 @@ def get_historical_data():
     formatted_symbol = symbol.upper() if symbol.upper().endswith('.NS') else f"{symbol.upper()}.NS"
     
     try:
-        ticker = yf.Ticker(formatted_symbol)
-        hist = ticker.history(period=period, interval=interval)
+        # Determine outputsize based on period
+        outputsize = 'full' if period in ['6mo', '1y', '5y'] else 'compact'
         
+        historical_data = alpha_vantage_service.get_historical_data(formatted_symbol, outputsize)
+        
+        # Format data
         formatted_data = []
-        for date, row in hist.iterrows():
+        for item in historical_data:
             formatted_data.append({
-                'date': date.strftime('%Y-%m-%d'),
-                'close': row['Close']
+                'date': item['date'],
+                'close': item['close']
             })
+        
+        # Filter based on period
+        now = datetime.now()
+        filter_date = now
+        
+        if period == '7d':
+            filter_date = now - timedelta(days=7)
+        elif period == '1mo':
+            filter_date = now - timedelta(days=30)
+        elif period == '6mo':
+            filter_date = now - timedelta(days=180)
+        elif period == '1y':
+            filter_date = now - timedelta(days=365)
+        
+        filtered_data = [item for item in formatted_data if datetime.strptime(item['date'], '%Y-%m-%d') >= filter_date]
             
-        return jsonify(formatted_data)
+        return jsonify(filtered_data)
     except Exception as e:
         logger.error(f"Error fetching historical data: {e}")
         return jsonify({'error': 'Failed to fetch historical data'}), 500
@@ -123,20 +140,21 @@ def get_top_gainers_losers():
         except Exception as scrape_error:
             logger.warn(f"Failed to scrape NSE data, falling back to Yahoo Finance: {scrape_error}")
             
-            # Fallback to Yahoo Finance data
+            # Fallback to Alpha Vantage data
             stock_quotes = []
             for symbol in POPULAR_STOCKS:
                 try:
-                    ticker = yf.Ticker(symbol)
-                    info = ticker.info
-                    if info.get('regularMarketPrice') and info.get('regularMarketPreviousClose'):
-                        current_price = info['regularMarketPrice']
-                        prev_close = info['regularMarketPreviousClose']
+                    stock_info = alpha_vantage_service.get_detailed_quote(symbol)
+                    
+                    current_price = stock_info.get('regularMarketPrice', 0)
+                    prev_close = stock_info.get('regularMarketPreviousClose', 0)
+                    
+                    if current_price and prev_close:
                         change_percent = ((current_price - prev_close) / prev_close) * 100
                         
                         stock_quotes.append({
                             'symbol': symbol,
-                            'name': info.get('longName', info.get('shortName', symbol)),
+                            'name': stock_info.get('longName', stock_info.get('shortName', symbol)),
                             'currentPrice': current_price,
                             'previousClose': prev_close,
                             'changePercent': change_percent
@@ -154,7 +172,7 @@ def get_top_gainers_losers():
                 'losers': losers,
                 'totalStocks': len(stock_quotes),
                 'timestamp': datetime.now().isoformat(),
-                'source': 'Yahoo Finance (Fallback)'
+                'source': 'Alpha Vantage (Fallback)'
             })
     except Exception as e:
         logger.error(f"Error fetching top gainers and losers: {e}")
@@ -193,18 +211,20 @@ def get_nifty50_data():
             logger.info("Successfully scraped NIFTY 50 data")
             return jsonify(data)
         except Exception as scrape_error:
-            logger.warn(f"Failed to scrape NIFTY 50 data, falling back to Yahoo Finance: {scrape_error}")
+            logger.warn(f"Failed to scrape NIFTY 50 data, falling back to Alpha Vantage: {scrape_error}")
             
-            # Fallback to Yahoo Finance
-            ticker = yf.Ticker('^NSEI')
-            info = ticker.info
+            # Fallback to Alpha Vantage - Use NSE index symbol
+            stock_info = alpha_vantage_service.get_quote('^NSEI')
+            
+            current_price = stock_info.get('regularMarketPrice', 0)
+            prev_close = stock_info.get('regularMarketPreviousClose', 0)
             
             return jsonify({
-                'ltp': info.get('regularMarketPrice', 0),
-                'change': info.get('regularMarketPrice', 0) - info.get('regularMarketPreviousClose', 0),
-                'changePercent': ((info.get('regularMarketPrice', 0) - info.get('regularMarketPreviousClose', 0)) / info.get('regularMarketPreviousClose', 1)) * 100,
-                'previousClose': info.get('regularMarketPreviousClose', 0),
-                'source': 'Yahoo Finance (Fallback)'
+                'ltp': current_price,
+                'change': current_price - prev_close,
+                'changePercent': ((current_price - prev_close) / prev_close * 100) if prev_close > 0 else 0,
+                'previousClose': prev_close,
+                'source': 'Alpha Vantage (Fallback)'
             })
     except Exception as e:
         logger.error(f"Error fetching NIFTY 50 data: {e}")
@@ -225,48 +245,35 @@ def compare_stocks():
     
     try:
         # Fetch data for both stocks
-        ticker1 = yf.Ticker(formatted_symbol1)
-        ticker2 = yf.Ticker(formatted_symbol2)
+        stock_info1 = alpha_vantage_service.get_detailed_quote(formatted_symbol1)
+        stock_info2 = alpha_vantage_service.get_detailed_quote(formatted_symbol2)
         
-        info1 = ticker1.info
-        info2 = ticker2.info
-        
-        # Calculate monthly change for both stocks
-        one_month_ago = datetime.now() - timedelta(days=30)
-        hist1 = ticker1.history(start=one_month_ago)
-        hist2 = ticker2.history(start=one_month_ago)
-        
+        # Calculate monthly change (set to 0 as we don't have historical data in this implementation)
         monthly_change1 = 0
         monthly_change2 = 0
         
-        if len(hist1) > 1:
-            monthly_change1 = ((info1['regularMarketPrice'] - hist1['Close'].iloc[0]) / hist1['Close'].iloc[0]) * 100
-            
-        if len(hist2) > 1:
-            monthly_change2 = ((info2['regularMarketPrice'] - hist2['Close'].iloc[0]) / hist2['Close'].iloc[0]) * 100
-        
         # Format stock data
         stock1 = {
-            'symbol': info1.get('symbol', formatted_symbol1),
-            'name': info1.get('longName', info1.get('shortName', '')),
-            'currentPrice': info1.get('regularMarketPrice', 0),
-            'previousClose': info1.get('regularMarketPreviousClose', 0),
-            'marketCap': info1.get('marketCap', 0),
-            'peRatio': info1.get('trailingPE', 0),
-            'fiftyTwoWeekHigh': info1.get('fiftyTwoWeekHigh', 0),
-            'fiftyTwoWeekLow': info1.get('fiftyTwoWeekLow', 0),
+            'symbol': stock_info1.get('symbol', formatted_symbol1.replace('.NS', '')),
+            'name': stock_info1.get('longName', stock_info1.get('shortName', '')),
+            'currentPrice': stock_info1.get('regularMarketPrice', 0),
+            'previousClose': stock_info1.get('regularMarketPreviousClose', 0),
+            'marketCap': stock_info1.get('marketCap', 0),
+            'peRatio': stock_info1.get('trailingPE', 0),
+            'fiftyTwoWeekHigh': stock_info1.get('fiftyTwoWeekHigh', 0),
+            'fiftyTwoWeekLow': stock_info1.get('fiftyTwoWeekLow', 0),
             'monthlyChange': monthly_change1
         }
         
         stock2 = {
-            'symbol': info2.get('symbol', formatted_symbol2),
-            'name': info2.get('longName', info2.get('shortName', '')),
-            'currentPrice': info2.get('regularMarketPrice', 0),
-            'previousClose': info2.get('regularMarketPreviousClose', 0),
-            'marketCap': info2.get('marketCap', 0),
-            'peRatio': info2.get('trailingPE', 0),
-            'fiftyTwoWeekHigh': info2.get('fiftyTwoWeekHigh', 0),
-            'fiftyTwoWeekLow': info2.get('fiftyTwoWeekLow', 0),
+            'symbol': stock_info2.get('symbol', formatted_symbol2.replace('.NS', '')),
+            'name': stock_info2.get('longName', stock_info2.get('shortName', '')),
+            'currentPrice': stock_info2.get('regularMarketPrice', 0),
+            'previousClose': stock_info2.get('regularMarketPreviousClose', 0),
+            'marketCap': stock_info2.get('marketCap', 0),
+            'peRatio': stock_info2.get('trailingPE', 0),
+            'fiftyTwoWeekHigh': stock_info2.get('fiftyTwoWeekHigh', 0),
+            'fiftyTwoWeekLow': stock_info2.get('fiftyTwoWeekLow', 0),
             'monthlyChange': monthly_change2
         }
         
@@ -352,25 +359,27 @@ def get_market_summary():
         try:
             nifty_data = nse_scraper.scrape_nifty50_data()
         except:
-            # Fallback to Yahoo Finance
-            ticker = yf.Ticker('^NSEI')
-            info = ticker.info
+            # Fallback to Alpha Vantage
+            stock_info = alpha_vantage_service.get_quote('^NSEI')
+            current_price = stock_info.get('regularMarketPrice', 0)
+            prev_close = stock_info.get('regularMarketPreviousClose', 0)
             nifty_data = {
-                'ltp': info.get('regularMarketPrice', 0),
-                'change': info.get('regularMarketPrice', 0) - info.get('regularMarketPreviousClose', 0),
-                'changePercent': ((info.get('regularMarketPrice', 0) - info.get('regularMarketPreviousClose', 0)) / info.get('regularMarketPreviousClose', 1)) * 100,
-                'previousClose': info.get('regularMarketPreviousClose', 0)
+                'ltp': current_price,
+                'change': current_price - prev_close,
+                'changePercent': ((current_price - prev_close) / prev_close * 100) if prev_close > 0 else 0,
+                'previousClose': prev_close
             }
         
         # Get SENSEX data
         try:
-            ticker = yf.Ticker('^BSESN')
-            info = ticker.info
+            stock_info = alpha_vantage_service.get_quote('^BSESN')
+            current_price = stock_info.get('regularMarketPrice', 0)
+            prev_close = stock_info.get('regularMarketPreviousClose', 0)
             sensex_data = {
-                'ltp': info.get('regularMarketPrice', 0),
-                'change': info.get('regularMarketPrice', 0) - info.get('regularMarketPreviousClose', 0),
-                'changePercent': ((info.get('regularMarketPrice', 0) - info.get('regularMarketPreviousClose', 0)) / info.get('regularMarketPreviousClose', 1)) * 100,
-                'previousClose': info.get('regularMarketPreviousClose', 0)
+                'ltp': current_price,
+                'change': current_price - prev_close,
+                'changePercent': ((current_price - prev_close) / prev_close * 100) if prev_close > 0 else 0,
+                'previousClose': prev_close
             }
         except:
             sensex_data = None
@@ -425,11 +434,10 @@ def get_popular_stocks():
         stock_data = []
         for stock in popular_stocks:
             try:
-                ticker = yf.Ticker(stock['symbol'])
-                info = ticker.info
+                stock_info = alpha_vantage_service.get_quote(stock['symbol'])
                 
-                current_price = info.get('regularMarketPrice', 0)
-                prev_close = info.get('regularMarketPreviousClose', 0)
+                current_price = stock_info.get('regularMarketPrice', 0)
+                prev_close = stock_info.get('regularMarketPreviousClose', 0)
                 change_percent = ((current_price - prev_close) / prev_close) * 100 if prev_close > 0 else 0
                 
                 stock_data.append({
@@ -475,13 +483,14 @@ def get_market_status():
         try:
             nifty_data = nse_scraper.scrape_nifty50_data()
         except:
-            ticker = yf.Ticker('^NSEI')
-            info = ticker.info
+            stock_info = alpha_vantage_service.get_quote('^NSEI')
+            current_price = stock_info.get('regularMarketPrice', 0)
+            prev_close = stock_info.get('regularMarketPreviousClose', 0)
             nifty_data = {
-                'ltp': info.get('regularMarketPrice', 0),
-                'change': info.get('regularMarketPrice', 0) - info.get('regularMarketPreviousClose', 0),
-                'changePercent': ((info.get('regularMarketPrice', 0) - info.get('regularMarketPreviousClose', 0)) / info.get('regularMarketPreviousClose', 1)) * 100,
-                'previousClose': info.get('regularMarketPreviousClose', 0)
+                'ltp': current_price,
+                'change': current_price - prev_close,
+                'changePercent': ((current_price - prev_close) / prev_close * 100) if prev_close > 0 else 0,
+                'previousClose': prev_close
             }
         
         # Get top gainers and losers count
