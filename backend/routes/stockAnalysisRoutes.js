@@ -22,30 +22,21 @@ const geminiService = require('../services/geminiService');
 
 // Helper function to format stock data with fallbacks
 function formatStockData(quote) {
-  // Log the raw quote structure to understand what data we're getting
-  console.log('Quote keys available:', Object.keys(quote));
-  console.log('Sample quote data:', {
-    regularMarketPrice: quote.regularMarketPrice,
-    fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh,
-    trailingPE: quote.trailingPE,
-    marketCap: quote.marketCap
-  });
-
   return {
-    symbol: quote.symbol || 'N/A',
-    name: quote.longName || quote.shortName || quote.displayName || quote.symbol || 'Unknown',
-    currentPrice: quote.regularMarketPrice || quote.ask || quote.bid || 0,
-    previousClose: quote.regularMarketPreviousClose || quote.previousClose || 0,
-    change: quote.regularMarketChange || 0,
-    changePercent: quote.regularMarketChangePercent || 0,
+    symbol: quote.symbol,
+    name: quote.longName || quote.shortName || quote.displayName || 'Unknown',
+    currentPrice: quote.regularMarketPrice || 0,
+    previousClose: quote.regularMarketPreviousClose || 0,
     marketCap: quote.marketCap || 0,
-    peRatio: quote.trailingPE || quote.forwardPE || null,
-    dividendYield: quote.dividendYield || quote.trailingAnnualDividendYield || null,
+    peRatio: quote.trailingPE || null,
+    dividendYield: quote.dividendYield || null,
     fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh || null,
     fiftyTwoWeekLow: quote.fiftyTwoWeekLow || null,
-    volume: quote.regularMarketVolume || quote.volume || 0,
-    averageVolume: quote.averageDailyVolume3Month || quote.averageDailyVolume10Day || quote.averageVolume || 0,
-    beta: quote.beta || null
+    volume: quote.regularMarketVolume || 0,
+    averageVolume: quote.averageDailyVolume3Month || quote.averageDailyVolume10Day || 0,
+    beta: quote.beta || null,
+    change: quote.regularMarketChange || 0,
+    changePercent: quote.regularMarketChangePercent || 0
   };
 }
 
@@ -69,95 +60,66 @@ router.get('/stock-data', async (req, res) => {
       return res.json(cachedData);
     }
 
-    let stockData = null;
+    // Fetch stock data from Yahoo Finance
+    const yf = await getYahooFinance();
     
-    try {
-      // Fetch stock data from Yahoo Finance
-      const yf = await getYahooFinance();
-      
-      // Add timeout wrapper
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Request timeout after 10 seconds')), 10000)
-      );
-      
-      const quote = await Promise.race([
-        yf.quote(symbol),
-        timeoutPromise
-      ]);
-      
-      console.log('Raw quote received, keys:', Object.keys(quote));
-      
-      // Format stock data with fallbacks
-      stockData = formatStockData(quote);
-      
-      console.log('Formatted stock data:', stockData);
+    // Add timeout wrapper
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Request timeout after 10 seconds')), 10000)
+    );
+    
+    const quote = await Promise.race([
+      yf.quote(symbol),
+      timeoutPromise
+    ]);
+    
+    console.log('Raw quote received, keys:', Object.keys(quote));
+    
+    // Format stock data with fallbacks
+    let stockData = formatStockData(quote);
+    
+    console.log('Formatted stock data:', stockData);
 
-      // Cache the result
-      stockCache.set(cacheKey, stockData);
+    // Cache the result
+    stockCache.set(cacheKey, stockData);
 
-      return res.json(stockData);
-      
-    } catch (fetchError) {
-      // If Yahoo Finance fails, return fallback data instead of 500 error
-      logger.warn(`Yahoo Finance error for ${symbol}, returning fallback data:`, fetchError.message);
-      console.warn('Using fallback data due to Yahoo Finance error');
-      
-      // Extract symbol name without exchange suffix for display
-      const symbolName = symbol.replace('.NS', '').replace('.BSE', '');
-      
-      stockData = {
-        symbol: symbol,
-        name: symbolName,
-        currentPrice: 0,
-        previousClose: 0,
-        marketCap: 0,
-        peRatio: null,
-        dividendYield: null,
-        fiftyTwoWeekHigh: null,
-        fiftyTwoWeekLow: null,
-        volume: 0,
-        averageVolume: 0,
-        beta: null,
-        change: 0,
-        changePercent: 0,
-        error: 'Unable to fetch real-time data. This may be due to API rate limiting.',
-        isFallback: true
-      };
-      
-      // Still cache fallback data for a shorter time
-      stockCache.set(cacheKey, stockData, 60); // Cache for only 1 minute
-      
-      return res.json(stockData);
-    }
+    res.json(stockData);
   } catch (error) {
-    // This catch is for any other unexpected errors
-    logger.error('Unexpected error in stock-data route:', error);
+    logger.error('Error fetching stock data:', error);
     console.error('Full error details:', {
       message: error.message,
       stack: error.stack,
       name: error.name
     });
     
-    // Return fallback data even in case of unexpected errors
-    const symbolName = (req.query.symbol || 'UNKNOWN').replace('.NS', '').replace('.BSE', '');
+    // Handle specific error codes
+    if (error.message && error.message.includes('429')) {
+      return res.status(429).json({ 
+        error: 'Too many requests. Please try again in a moment.',
+        code: 'RATE_LIMIT'
+      });
+    }
     
-    return res.json({
-      symbol: req.query.symbol || 'UNKNOWN',
-      name: symbolName,
-      currentPrice: 0,
-      previousClose: 0,
-      marketCap: 0,
-      peRatio: null,
-      dividendYield: null,
-      fiftyTwoWeekHigh: null,
-      fiftyTwoWeekLow: null,
-      volume: 0,
-      averageVolume: 0,
-      beta: null,
-      change: 0,
-      changePercent: 0,
-      error: 'Service temporarily unavailable',
-      isFallback: true
+    // Handle specific error for invalid stock symbols
+    if (error.message && (error.message.includes('Invalid symbol') || error.message.includes('No data found') || error.message.includes('Not Found') || error.message.includes('404'))) {
+      return res.status(404).json({ 
+        error: 'Stock not found. Please enter a valid stock symbol.',
+        code: 'NOT_FOUND'
+      });
+    }
+    
+    // Handle timeout
+    if (error.message && error.message.includes('timeout')) {
+      return res.status(408).json({ 
+        error: 'Request timed out. Please try again.',
+        code: 'TIMEOUT'
+      });
+    }
+    
+    res.status(500).json({ 
+      error: 'Failed to fetch stock data. Please try again.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      code: 'FETCH_ERROR'
     });
   }
 });

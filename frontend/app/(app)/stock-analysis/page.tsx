@@ -54,11 +54,10 @@ export default function StockAnalysisPage() {
     try {
       const response = await fetch(`/api/stocks-analysis/stock-data?symbol=${symbol}&t=${Date.now()}&r=${Math.random()}`)
       
-      // Even if response is not OK, try to parse JSON as we might have fallback data
-      const data = await response.json()
-      
       if (!response.ok) {
-        // Handle error responses
+        const errorData = await response.json().catch(() => ({}))
+        
+        // Handle specific error codes
         if (response.status === 429) {
           throw new Error('Too many requests. Please wait a moment and try again.')
         }
@@ -69,13 +68,10 @@ export default function StockAnalysisPage() {
           throw new Error('Request timed out. Please check your internet connection and try again.')
         }
         
-        throw new Error(data.error || 'Failed to fetch stock data. Please try again.')
+        throw new Error(errorData.error || 'Failed to fetch stock data. Please try again.')
       }
       
-      // Check if we received fallback data
-      if (data.isFallback || data.error) {
-        setError(data.error || 'Limited data available due to API restrictions. Some information may be incomplete.')
-      }
+      const data = await response.json()
       
       // Validate that we received valid data
       if (!data || !data.symbol) {
@@ -84,12 +80,8 @@ export default function StockAnalysisPage() {
       
       setStockData(data)
       
-      // Only fetch analysis if we have real data (not fallback)
-      if (!data.isFallback && data.currentPrice > 0) {
-        fetchAnalysis(data)
-      } else if (data.isFallback) {
-        setError('Unable to generate AI analysis due to incomplete stock data. Please try again later.')
-      }
+      // Fetch analysis after getting stock data
+      fetchAnalysis(data)
     } catch (err: unknown) {
       console.error('Error fetching stock analysis data:', err)
       const message = err instanceof Error ? err.message : 'Error fetching stock data. Please try again.'
@@ -212,40 +204,21 @@ export default function StockAnalysisPage() {
       {stockData && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                {stockData.name} ({stockData.symbol})
-              </CardTitle>
-              {(stockData as any).isFallback && (
-                <Badge variant="outline" className="text-yellow-600 border-yellow-600">
-                  Limited Data
-                </Badge>
-              )}
-            </div>
-            <CardDescription>
-              {(stockData as any).isFallback 
-                ? 'Showing cached/limited data due to API restrictions' 
-                : 'Real-time stock data'}
-            </CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              {stockData.name} ({stockData.symbol})
+            </CardTitle>
+            <CardDescription>Real-time stock data</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Current Price</p>
-                <p className="text-xl font-semibold">
-                  {stockData.currentPrice && stockData.currentPrice > 0 
-                    ? `₹${stockData.currentPrice.toFixed(2)}` 
-                    : 'N/A'}
-                </p>
+                <p className="text-xl font-semibold">${stockData.currentPrice?.toFixed(2)}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Market Cap</p>
-                <p className="text-xl font-semibold">
-                  {stockData.marketCap && stockData.marketCap > 0 
-                    ? `₹${(stockData.marketCap / 1000000000).toFixed(2)}B` 
-                    : 'N/A'}
-                </p>
+                <p className="text-xl font-semibold">${(stockData.marketCap / 1000000000).toFixed(2)}B</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">P/E Ratio</p>
@@ -254,10 +227,7 @@ export default function StockAnalysisPage() {
               <div>
                 <p className="text-sm text-muted-foreground">52W Range</p>
                 <p className="text-xl font-semibold">
-                  {stockData.fiftyTwoWeekLow && stockData.fiftyTwoWeekHigh && 
-                   stockData.fiftyTwoWeekLow > 0 && stockData.fiftyTwoWeekHigh > 0
-                    ? `₹${stockData.fiftyTwoWeekLow.toFixed(2)} - ₹${stockData.fiftyTwoWeekHigh.toFixed(2)}`
-                    : 'N/A'}
+                  ${stockData.fiftyTwoWeekLow?.toFixed(2)} - ${stockData.fiftyTwoWeekHigh?.toFixed(2)}
                 </p>
               </div>
             </div>
