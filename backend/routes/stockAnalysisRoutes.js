@@ -340,15 +340,6 @@ router.post('/stock-analysis', async (req, res) => {
 });
 
 // Route to get personal stock suggestions based on user's financial data
-// Route to get personal stock suggestions based on user's financial data
-// Route to get personal stock suggestions based on user's financial data
-// Route to get personal stock suggestions based on user's financial data
-// Route to get personal stock suggestions based on user's financial data
-// Route to get personal stock suggestions based on user's financial data
-// Route to get personal stock suggestions based on user's financial data
-// Route to get personal stock suggestions based on user's financial data
-// Route to get personal stock suggestions based on user's financial data
-// Route to get personal stock suggestions based on user's financial data
 router.post('/personal-suggestions', async (req, res) => {
   try {
     console.log('Personal suggestions request received:', req.body);

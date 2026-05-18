@@ -44,17 +44,17 @@ const apiRequest = async (endpoint, options = {}) => {
 
 // Auth API
 export const authAPI = {
-  login: (credentials) => apiRequest('/v1/auth/login', {
+  login: (credentials) => apiRequest('/auth/login', {
     method: 'POST',
     body: JSON.stringify(credentials)
   }),
   
-  register: (userData) => apiRequest('/v1/auth/register', {
+  register: (userData) => apiRequest('/auth/register', {
     method: 'POST',
     body: JSON.stringify(userData)
   }),
   
-  getMe: () => apiRequest('/v1/auth/me')
+  getMe: () => apiRequest('/auth/me')
 };
 
 // Profile API

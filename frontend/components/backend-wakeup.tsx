@@ -23,8 +23,7 @@ export function BackendWakeup() {
     hasWokenUp.current = true
 
     const wakeUpBackend = async () => {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
-      const healthEndpoint = `${apiUrl}/api/health`
+      const healthEndpoint = '/api/health'
       
       let attempts = 0
       const maxAttempts = 3

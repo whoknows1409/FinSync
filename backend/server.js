@@ -32,7 +32,7 @@ console.log('Setting up routes...');
 
 // Routes
 app.use('/api/auth', authRoutes);
-console.log('Auth routes registered at /api/v1/auth');
+console.log('Auth routes registered at /api/auth');
 
 app.use('/api/v1/transactions', transactionRoutes);
 console.log('Transaction routes registered at /api/v1/transactions');

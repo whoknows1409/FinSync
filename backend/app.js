@@ -3,7 +3,6 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const cookieParser = require('cookie-parser');
-const settingsRoutes = require('./routes/settings');
 
 // Load environment variables
 dotenv.config();
@@ -43,8 +42,7 @@ app.use(express.json({ limit: '50mb' })); // Increase JSON payload limit
 app.use(express.urlencoded({ limit: '50mb', extended: true })); // Increase URL-encoded payload limit
 app.use(cookieParser());
 
-// Add this line with your other routes
-app.use('/api/settings', settingsRoutes);
+// Settings routes are registered in server.js
 
 // Test endpoint
 app.get('/api/test', (req, res) => {
@@ -87,10 +85,6 @@ app.get('/api/health', (req, res) => {
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!' });
-});
+// Global error handler is registered in server.js after all routes
 
 module.exports = app;

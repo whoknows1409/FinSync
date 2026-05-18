@@ -53,9 +53,8 @@ export default function StockComparison() {
       const formattedSymbol1 = symbol1.trim().toUpperCase() + (symbol1.trim().toUpperCase().endsWith('.NS') ? '' : '.NS')
       const formattedSymbol2 = symbol2.trim().toUpperCase() + (symbol2.trim().toUpperCase().endsWith('.NS') ? '' : '.NS')
       
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
       const response = await fetch(
-        `${apiUrl}/api/stocks-analysis/compare?symbol1=${formattedSymbol1}&symbol2=${formattedSymbol2}`
+        `/api/stocks-analysis/compare?symbol1=${formattedSymbol1}&symbol2=${formattedSymbol2}`
       )
       
       if (!response.ok) {

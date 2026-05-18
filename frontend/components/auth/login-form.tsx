@@ -63,7 +63,7 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
     setResending(true)
     
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/resend-verification`, {
+      const response = await fetch(`/api/auth/resend-verification`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

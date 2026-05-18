@@ -113,8 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true)
     setError(null)
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
-      const signupUrl = `${apiUrl}/api/auth/register`
+      const signupUrl = '/api/auth/register'
       
       const response = await fetch(signupUrl, {
         method: 'POST',
