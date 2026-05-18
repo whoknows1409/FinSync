@@ -116,6 +116,15 @@ router.get('/search', async (req, res) => {
     if (!quote) {
       throw new Error('Failed to fetch stock data after retries');
     }
+
+    // Fetch beta from quoteSummary (not available in quote())
+    let beta = 0;
+    try {
+      const summary = await (await getYahooFinance()).quoteSummary(symbol, { modules: ['defaultKeyStatistics'] });
+      beta = summary?.defaultKeyStatistics?.beta || 0;
+    } catch (betaErr) {
+      logger.warn(`Could not fetch beta for ${symbol}:`, betaErr.message);
+    }
     
     // Format the stock data
     const stock = {
@@ -131,7 +140,7 @@ router.get('/search', async (req, res) => {
       fiftyTwoWeekLow: quote.fiftyTwoWeekLow || 0,
       volume: quote.regularMarketVolume || 0,
       averageVolume: quote.averageDailyVolume3Month || 0,
-      beta: quote.beta || 0,
+      beta: beta,
       change: quote.regularMarketPrice && quote.regularMarketPreviousClose 
         ? quote.regularMarketPrice - quote.regularMarketPreviousClose 
         : 0,
@@ -222,6 +231,15 @@ router.get('/:symbol', async (req, res) => {
       if (!quote) {
         throw new Error('Failed to fetch stock data after retries');
       }
+
+      // Fetch beta from quoteSummary (not available in quote())
+      let beta = 0;
+      try {
+        const summary = await (await getYahooFinance()).quoteSummary(symbol, { modules: ['defaultKeyStatistics'] });
+        beta = summary?.defaultKeyStatistics?.beta || 0;
+      } catch (betaErr) {
+        logger.warn(`Could not fetch beta for ${symbol}:`, betaErr.message);
+      }
       
       // Format the stock data
       const stockData = {
@@ -237,7 +255,7 @@ router.get('/:symbol', async (req, res) => {
         fiftyTwoWeekLow: quote.fiftyTwoWeekLow,
         volume: quote.regularMarketVolume,
         averageVolume: quote.averageDailyVolume3Month,
-        beta: quote.beta,
+        beta: beta,
         change: quote.regularMarketPrice && quote.regularMarketPreviousClose 
           ? quote.regularMarketPrice - quote.regularMarketPreviousClose 
           : 0,
