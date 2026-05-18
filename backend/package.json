@@ -59,7 +59,7 @@
     "puppeteer": "^24.27.0",
     "winston": "^3.18.3",
     "xss": "^1.0.14",
-    "yahoo-finance2": "^2.13.3"
+    "yahoo-finance2": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.4",

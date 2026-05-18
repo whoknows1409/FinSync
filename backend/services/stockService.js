@@ -3,8 +3,13 @@ const axios = require('axios');
 let yahooFinanceInstance;
 async function getYahooFinance() {
   if (!yahooFinanceInstance) {
-    const YahooFinanceClass = (await import('yahoo-finance2')).default;
-    yahooFinanceInstance = new YahooFinanceClass();
+    const mod = (await import('yahoo-finance2')).default;
+    // v3 exports a class (needs `new`), v2 exports a ready-to-use object
+    if (typeof mod === 'function') {
+      yahooFinanceInstance = new mod();
+    } else {
+      yahooFinanceInstance = mod;
+    }
   }
   return yahooFinanceInstance;
 }
