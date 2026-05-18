@@ -300,11 +300,12 @@ router.post('/stock-analysis', async (req, res) => {
         const startDate = new Date();
         startDate.setFullYear(endDate.getFullYear() - 1);
         
-        const historical = await (await getYahooFinance()).historical(formattedStock.symbol, {
+        const chartResult = await (await getYahooFinance()).chart(formattedStock.symbol, {
           period1: startDate,
           period2: endDate,
           interval: '1wk'
         });
+        const historical = (chartResult?.quotes || []).filter(item => item.close != null);
         
         if (historical && historical.length > 0) {
           const prices = historical.map(item => item.high);

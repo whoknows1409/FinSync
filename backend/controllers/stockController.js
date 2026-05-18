@@ -239,13 +239,15 @@ exports.getHistoricalData = async (req, res) => {
         interval: interval,
       };
       
-      const historical = await Promise.race([
-        (await getYahooFinance()).historical(stockSymbol, queryOptions),
+      const chartResult = await Promise.race([
+        (await getYahooFinance()).chart(stockSymbol, queryOptions),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Historical data request timeout')), 15000)
         )
       ]);
       
+      const historical = (chartResult?.quotes || []).filter(item => item.close != null);
+
       if (!historical || historical.length === 0) {
         throw new Error('No historical data returned');
       }
