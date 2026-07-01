@@ -1,521 +1,287 @@
-# 💰 FinSync - Unified Finance Management Platform
+# FinSync — Unified Finance Management Platform
 
 <div align="center">
 
-![FinSync Logo](https://img.shields.io/badge/FinSync-Financial%20Freedom-blue?style=for-the-badge)
+![FinSync](https://img.shields.io/badge/FinSync-Unified%20Finance%20Platform-0A66C2?style=for-the-badge)
 
-**Track expenses • Analyze stocks • Practice trading • AI-powered insights**
+**An AI-powered full-stack web application that unifies personal expense tracking, real-time NSE stock analysis, and paper trading into a single platform.**
 
-[![Next.js](https://img.shields.io/badge/Next.js-14.2-black?style=flat-square&logo=next.js)](https://nextjs.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-18+-green?style=flat-square&logo=node.js)](https://nodejs.org/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green?style=flat-square&logo=mongodb)](https://www.mongodb.com/)
-[![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
+[![Next.js](https://img.shields.io/badge/Next.js_14-black?style=flat-square&logo=next.js)](https://nextjs.org/)
+[![Express](https://img.shields.io/badge/Express_5-000000?style=flat-square&logo=express)](https://expressjs.com/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=flat-square&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![Gemini AI](https://img.shields.io/badge/Gemini_AI-4285F4?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
-[Live Demo](#) • [Documentation](#-documentation) • [Features](#-features) • [Installation](#-installation)
+[Live Demo](https://finsync-w6ce.onrender.com) &nbsp;•&nbsp; [Architecture](#architecture) &nbsp;•&nbsp; [Features](#features) &nbsp;•&nbsp; [Tech Stack](#tech-stack) &nbsp;•&nbsp; [Getting Started](#getting-started)
 
 </div>
 
 ---
 
-## 📖 Table of Contents
+## Overview
 
-- [Overview](#-overview)
-- [Features](#-features)
-- [Tech Stack](#-tech-stack)
-- [Getting Started](#-getting-started)
-- [Project Structure](#-project-structure)
-- [Environment Variables](#-environment-variables)
-- [Deployment](#-deployment)
-- [API Documentation](#-api-documentation)
-- [Contributing](#-contributing)
-- [License](#-license)
+**FinSync** is a comprehensive financial management platform built as a full-stack application with a decoupled frontend–backend architecture. It integrates three core financial modules — **expense management**, **stock market analysis**, and **paper trading** — into a single unified interface, enhanced by a context-aware AI chatbot powered by Google Gemini.
+
+The platform exposes **70+ RESTful API endpoints** across 14 route modules and is backed by 12 Mongoose data models. The AI chatbot dynamically injects user-specific financial context (transaction history, budget utilization, recurring expenses, financial goals) into prompts, enabling personalized insights without fine-tuning.
 
 ---
 
-## 🎯 Overview
+## Architecture
 
-**FinSync** is a comprehensive financial management platform that combines expense tracking, stock analysis, and paper trading into one unified application. Powered by AI, FinSync provides intelligent insights to help users make smarter financial decisions.
+```
+┌──────────────────────┐       ┌──────────────────────┐       ┌───────────────┐
+│   Next.js 14 (SSR)   │──────▶│   Express 5 API      │──────▶│  MongoDB Atlas│
+│   TypeScript + React │◀──────│   Node.js 18+        │       │  (Mongoose)   │
+│   Tailwind CSS 4     │       │   JWT + Google OAuth  │       └───────────────┘
+│   shadcn/ui + Radix  │       │   Rate Limiting       │
+└──────────────────────┘       │   Helmet + XSS Guard  │       ┌───────────────┐
+                               │                      │──────▶│  Google Gemini│
+┌──────────────────────┐       │   14 Route Modules    │       │  AI API       │
+│   Flask (Python)     │──────▶│   70+ Endpoints       │       └───────────────┘
+│   yfinance + Pandas  │       │   12 Mongoose Models  │
+│   NSE Data Scraping  │       └──────────────────────┘       ┌───────────────┐
+└──────────────────────┘                                       │  Yahoo Finance│
+                                                               │  API + NSE    │
+                                                               └───────────────┘
+```
 
-### Why FinSync?
-
-- 📊 **All-in-One Platform**: No need to juggle multiple apps and spreadsheets
-- 🤖 **AI-Powered Insights**: Get personalized financial advice and stock recommendations
-- 📈 **Real Stock Data**: Access real-time data for 2000+ NSE stocks
-- 💹 **Risk-Free Trading**: Practice trading with ₹10,000 virtual money
-- 🔒 **Secure & Private**: Bank-grade security for your financial data
-- 🎨 **Beautiful UI**: Modern, intuitive interface with dark mode support
-
----
-
-## ✨ Features
-
-### 💳 Expense Management
-- ✅ Track income and expenses with automatic categorization
-- ✅ Create and monitor budgets with smart alerts
-- ✅ Set financial goals and track progress
-- ✅ Export data to PDF/Excel
-- ✅ Recurring transaction support
-- ✅ Visual spending analytics with charts
-
-### 📊 Stock Analysis
-- ✅ Real-time data for 2000+ NSE companies
-- ✅ AI-powered price predictions
-- ✅ Sentiment analysis from news and social media
-- ✅ Technical and fundamental analysis
-- ✅ Watchlist management
-- ✅ Detailed company information
-
-### 💹 Paper Trading
-- ✅ Start with ₹10,000 virtual money
-- ✅ Execute trades at real market prices
-- ✅ Track portfolio performance
-- ✅ View trading history and analytics
-- ✅ Risk-free practice environment
-- ✅ Market and limit orders
-
-### 🤖 AI Chatbot
-- ✅ Financial advice and recommendations
-- ✅ Stock analysis and insights
-- ✅ Budget optimization suggestions
-- ✅ Natural language queries
-- ✅ Personalized responses
-- ✅ Voice input support with speech recognition
-- ✅ Text + Voice output modes
-- ✅ Stop response button (stop at any time)
-- ✅ Typing animation effects
-- ✅ Chat history with export (PDF, Text, WhatsApp)
-- ✅ 10 prompts per chat limit
-- ✅ Auto-save chat conversations
-
-### 📈 Analytics & Insights
-- ✅ Interactive spending charts
-- ✅ Category-wise expense breakdown with improved pie chart labels
-- ✅ Monthly/yearly comparisons
-- ✅ Budget vs actual analysis
-- ✅ Income vs expense trends
-- ✅ Export reports to PDF/Excel
+**Key architectural decisions:**
+- **Decoupled frontend/backend** — Next.js frontend communicates with Express API via REST, enabling independent scaling and deployment
+- **Context-aware AI pipeline** — Chatbot queries are enriched with real-time user financial data (budgets, transactions, goals, recurring expenses) before being sent to Gemini, providing personalized responses without model fine-tuning
+- **Dual data sourcing for stocks** — Primary stock data fetched via Yahoo Finance API (Node.js), with a Flask-based Python microservice as a secondary source for NSE-specific scraping using yfinance and Cheerio/Puppeteer
 
 ---
 
-## 🛠️ Tech Stack
+## Features
 
-### Frontend
-- **Framework**: Next.js 14.2 (React 18)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **UI Components**: Radix UI, shadcn/ui
-- **Charts**: Chart.js, Recharts
-- **State Management**: React Context API
-- **Forms**: React Hook Form + Zod validation
-- **Animations**: Framer Motion
+### Expense Management
+- Full CRUD for income and expense transactions with **automatic AI-powered categorization** via Gemini
+- Budget creation with real-time spend tracking, category-wise performance analysis, and over-budget alerts
+- Financial goal tracking with progress monitoring
+- Recurring transaction support (daily, weekly, monthly, yearly) with automated cron-based processing
+- Data export to **CSV, Excel, and PDF** formats using ExcelJS and PDFKit
+- **10 analytics endpoints** — AI insights, recurring detection, budget vs. actual, expense breakdown, income/expense trends, savings growth, spending patterns, category trends, and summary
 
-### Backend
-- **Runtime**: Node.js 18+
-- **Framework**: Express.js
-- **Language**: JavaScript
-- **Database**: MongoDB (Mongoose ODM)
-- **Authentication**: JWT, Passport.js (Google OAuth)
-- **File Upload**: Multer, Cloudinary
-- **API Docs**: Swagger/OpenAPI
-- **Security**: Helmet, Rate Limiting, XSS Protection
+### Stock Market Analysis
+- Real-time data for **NSE-listed stocks** via Yahoo Finance API with search, historical data, and NIFTY 50 index tracking
+- **AI-powered stock analysis** — sentiment analysis from scraped news data, personalized stock suggestions, and price prediction using Gemini
+- Stock comparison tool with monthly change calculations and fundamental metrics (P/E, market cap, 52-week range, beta)
+- Sector-wise market performance tracking across 8 sectors (IT, Banking, Pharma, FMCG, Auto, Oil & Gas, Metal, Cement)
+- Market status monitoring with NSE trading hours detection and top gainers/losers via live NSE scraping
+- Interactive candlestick-style charts using **Lightweight Charts** and Chart.js
 
-### AI & Data
-- **AI Model**: Google Gemini AI
-- **Stock Data**: Yahoo Finance API
-- **News Scraping**: Cheerio, Puppeteer
-- **Data Processing**: Python (FastAPI)
+### Paper Trading Engine
+- Virtual trading account initialized with **₹10,000** virtual currency
+- Support for **Market and Limit orders** with buy/sell execution at real-time prices
+- Limit order validation with **2% maximum price slippage** protection
+- Portfolio management with real-time P&L calculations (realized and unrealized), sector allocation, and performance metrics
+- Comprehensive trading statistics — win rate, best/worst trade, total volume, and average holding time
+- Watchlist management with target price and notes
 
-### DevOps & Tools
-- **Version Control**: Git
-- **Package Manager**: npm
-- **Code Quality**: ESLint, Prettier
-- **Testing**: Jest, Supertest
-- **Deployment**: Render
-- **Database**: MongoDB Atlas
-- **CI/CD**: GitHub Actions (optional)
+### AI Chatbot (Gemini-Powered)
+- **Context-aware financial assistant** — dynamically injects user's transaction history, budget utilization, goal progress, and recurring expenses into prompts
+- Specialized endpoints for budget advice, investment recommendations, stock sentiment analysis, and transaction categorization
+- Voice input via Web Speech API and text-to-speech output
+- Chat history with auto-save, export to **PDF/Text/WhatsApp** format, and 10-prompt-per-session limit
+- Typing animation effects with real-time stop/cancel functionality
+
+### Authentication & Security
+- **JWT-based authentication** with access and refresh token rotation
+- **Google OAuth 2.0** integration for social login
+- Email verification flow via **SendGrid** with HTML email templates
+- Security middleware stack: **Helmet**, **express-rate-limit**, **express-mongo-sanitize**, **XSS protection**, and **HPP** (HTTP Parameter Pollution)
+- Input validation layer using **express-validator** and **Joi** schemas across all endpoints
+
+### Analytics Dashboard
+- Interactive spending charts with **Chart.js** and **Recharts**
+- Category-wise expense breakdown, monthly/yearly comparisons, and budget vs. actual analysis
+- Income vs. expense trend visualization and savings growth tracking
+- Customizable dashboard layout with drag-and-drop support
+- Dark mode support via **next-themes**
 
 ---
 
-## 🚀 Getting Started
+## Tech Stack
+
+| Layer | Technologies |
+|---|---|
+| **Frontend** | Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS 4, shadcn/ui, Radix UI |
+| **UI/Charts** | Chart.js, Recharts, Lightweight Charts, Framer Motion, Lucide Icons |
+| **Forms & Validation** | React Hook Form, Zod |
+| **Backend** | Node.js 18+, Express 5, Mongoose ODM |
+| **Database** | MongoDB Atlas |
+| **Authentication** | JWT (jsonwebtoken), Google OAuth 2.0 (google-auth-library), SendGrid (email verification) |
+| **AI/ML** | Google Gemini AI (@google/generative-ai) |
+| **Stock Data** | Yahoo Finance API (yahoo-finance2 v3), yfinance (Python), Cheerio + Puppeteer (NSE scraping) |
+| **Python Service** | Flask, yfinance, Pandas |
+| **Data Export** | ExcelJS, PDFKit, jsPDF |
+| **Security** | Helmet, express-rate-limit, express-mongo-sanitize, XSS, HPP |
+| **File Upload** | Multer, Cloudinary |
+| **Scheduling** | node-cron (recurring transaction processing) |
+| **Logging** | Winston |
+| **Deployment** | Render (frontend + backend), MongoDB Atlas |
+
+---
+
+## Project Structure
+
+```
+FinSync/
+├── frontend/                       # Next.js 14 application (TypeScript)
+│   ├── app/
+│   │   ├── (app)/                  # Authenticated routes (App Router)
+│   │   │   ├── dashboard/          # Dashboard page
+│   │   │   ├── transactions/       # Expense management
+│   │   │   ├── budget/             # Budget tracking
+│   │   │   ├── stocks/             # Stock market data
+│   │   │   ├── stock-analysis/     # AI stock analysis
+│   │   │   ├── trading/            # Paper trading engine
+│   │   │   ├── chatbot/            # AI chatbot interface
+│   │   │   ├── analysis/           # Analytics dashboard
+│   │   │   ├── profile/            # User profile
+│   │   │   └── settings/           # App settings
+│   │   ├── auth/                   # Login, Register, OAuth
+│   │   ├── verify-email/           # Email verification
+│   │   └── page.tsx                # Landing page
+│   ├── components/                 # React components
+│   │   ├── ui/                     # shadcn/ui primitives
+│   │   ├── dashboard/              # Dashboard widgets
+│   │   ├── stocks/                 # Stock components
+│   │   ├── trading/                # Trading components
+│   │   └── chatbot/                # Chatbot components
+│   ├── hooks/                      # Custom React hooks
+│   ├── lib/                        # Utilities, API client
+│   └── types/                      # TypeScript type definitions
+│
+├── backend/                        # Express 5 API (Node.js)
+│   ├── routes/                     # 14 route modules (72 endpoints)
+│   ├── controllers/                # 11 controller modules
+│   ├── models/                     # 12 Mongoose schemas
+│   ├── services/                   # Stock, NSE, Gemini services
+│   ├── middleware/                  # Auth, rate-limit, validation, upload
+│   ├── utils/                      # Gemini, email, logger, cron, export
+│   ├── config/                     # Database and app configuration
+│   ├── app.js                      # Express app setup (CORS, middleware)
+│   └── server.js                   # Server entry point
+│
+├── python-service/                 # Flask microservice
+│   ├── app.py                      # NSE stock data API
+│   └── requirements.txt
+│
+└── backend/app.py                  # Flask stock analysis service (NSE scraping)
+```
+
+---
+
+## Getting Started
 
 ### Prerequisites
-
-- Node.js 18+ and npm
-- MongoDB (local or Atlas)
-- Git
-- Gemini API key
+- **Node.js** 18+ and npm 8+
+- **MongoDB** (local instance or [MongoDB Atlas](https://www.mongodb.com/atlas) free tier)
+- **Gemini API Key** (from [Google AI Studio](https://aistudio.google.com/))
+- **Python 3.8+** (optional, for the stock analysis microservice)
 
 ### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/whoknows1409/finsync.git
-   cd finsync
-   ```
-
-2. **Install backend dependencies**
-   ```bash
-   cd backend
-   npm install
-   ```
-
-3. **Install frontend dependencies**
-   ```bash
-   cd ../frontend
-   npm install
-   ```
-
-4. **Set up environment variables**
-
-   **Backend** (`backend/.env`):
-   ```env
-   PORT=5000
-   MONGO_URI=mongodb://localhost:27017/finsync
-   JWT_SECRET=your_jwt_secret
-   JWT_REFRESH_SECRET=your_refresh_secret
-   GEMINI_API_KEY=your_gemini_api_key
-   GOOGLE_CLIENT_ID=your_google_client_id
-   GOOGLE_CLIENT_SECRET=your_google_client_secret
-   ```
-
-   **Frontend** (`frontend/.env`):
-   ```env
-   NEXT_PUBLIC_API_URL=http://localhost:5000
-   NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id
-   NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
-   ```
-
-5. **Run the application**
-
-   **Backend** (in `backend/` directory):
-   ```bash
-   npm run dev
-   ```
-
-   **Frontend** (in `frontend/` directory):
-   ```bash
-   npm run dev
-   ```
-
-6. **Access the application**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:5000/api
-
----
-
-## 📁 Project Structure
-
-```
-finsync/
-├── backend/                    # Backend Node.js application
-│   ├── config/                 # Configuration files
-│   ├── controllers/            # Route controllers
-│   ├── middleware/             # Custom middleware
-│   ├── models/                 # Mongoose models
-│   ├── routes/                 # API routes
-│   ├── services/               # Business logic
-│   ├── utils/                  # Helper functions
-│   ├── server.js               # Entry point
-│   └── package.json
-│
-├── frontend/                   # Frontend Next.js application
-│   ├── app/                    # Next.js 14 app directory
-│   │   ├── (app)/              # Authenticated routes
-│   │   ├── auth/               # Authentication pages
-│   │   └── page.tsx            # Landing page
-│   ├── components/             # React components
-│   │   ├── ui/                 # UI components
-│   │   ├── auth/               # Auth components
-│   │   ├── dashboard/          # Dashboard components
-│   │   └── ...
-│   ├── lib/                    # Utilities and helpers
-│   ├── hooks/                  # Custom React hooks
-│   ├── types/                  # TypeScript types
-│   ├── public/                 # Static assets
-│   └── package.json
-│
-├── python-service/             # Python FastAPI service
-│   ├── app.py
-│   └── requirements.txt
-│
-├── scripts/                    # Utility scripts
-├── docs/                       # Documentation
-├── .gitignore
-├── README.md
-└── package.json
-```
-
----
-
-## 🔐 Environment Variables
-
-### Backend Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `NODE_ENV` | Environment (development/production) | Yes |
-| `PORT` | Server port (default: 5000) | Yes |
-| `MONGO_URI` | MongoDB connection string | Yes |
-| `JWT_SECRET` | Secret for JWT tokens | Yes |
-| `JWT_REFRESH_SECRET` | Secret for refresh tokens | Yes |
-| `GEMINI_API_KEY` | Google Gemini API key | Yes |
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID | Optional |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth secret | Optional |
-| `CLOUDINARY_*` | Cloudinary config for images | Optional |
-| `SMTP_*` | Email configuration | Optional |
-
-### Frontend Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `NEXT_PUBLIC_API_URL` | Backend API URL | Yes |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google OAuth client ID | Optional |
-| `NEXT_PUBLIC_GEMINI_API_KEY` | Gemini API key for frontend | Optional |
-
-See `.env.example` files for complete configuration.
-
----
-
-## 🚀 Deployment
-
-### Deploy to Render (Recommended)
-
-FinSync is optimized for deployment on Render.
-
-**Deployment Time**: ~10-15 minutes
-
-**Cost**:
-- 🎉 Free tier: $0/month (with cold starts after inactivity)
-- ⚡ Paid tier: Starting at $7/month per service
-
-### Prerequisites
-- ✅ GitHub account with this repo pushed
-- ✅ [Render account](https://dashboard.render.com/) (free)
-- ✅ [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) (free M0 cluster)
-- ✅ Gemini API key (from Google AI Studio)
-
-### Quick Deploy Steps
 ```bash
-# 1. Ensure code is pushed to GitHub
-git add .
-git commit -m "Ready for deployment"
-git push origin master
+# Clone the repository
+git clone https://github.com/whoknows1409/FinSync.git
+cd FinSync
 
-# 2. Follow DEPLOYMENT_QUICK_START.md for:
-#    - MongoDB Atlas setup (2 minutes)
-#    - Backend deployment (3 minutes)
-#    - Frontend deployment (3 minutes)
-#    - Configuration (2 minutes)
-
-# 3. Your app will be live at:
-#    Frontend: https://your-app-name.onrender.com
-#    Backend:  https://your-app-name-api.onrender.com
-```
-
-### Architecture
-```
-┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
-│  Next.js        │─────▶│  Express API    │─────▶│  MongoDB Atlas  │
-│  Frontend       │      │  Backend        │      │  Database       │
-│  (Render)       │◀─────│  (Render)       │      │  (Cloud)        │
-└─────────────────┘      └─────────────────┘      └─────────────────┘
-```
-
----
-
-## 📚 API Documentation
-
-### Base URL
-```
-Local: http://localhost:5000/api
-Production: https://your-backend.onrender.com/api
-```
-
-### Authentication
-All protected endpoints require JWT token in Authorization header:
-```
-Authorization: Bearer <your_jwt_token>
-```
-
-### Key Endpoints
-
-#### Authentication
-- `POST /api/auth/register` - Create account
-- `POST /api/auth/login` - Login
-- `POST /api/auth/google` - Google OAuth
-- `POST /api/auth/refresh` - Refresh token
-
-#### Transactions
-- `GET /api/transactions` - Get all transactions
-- `POST /api/transactions` - Create transaction
-- `PUT /api/transactions/:id` - Update transaction
-- `DELETE /api/transactions/:id` - Delete transaction
-
-#### Budgets
-- `GET /api/budgets` - Get all budgets
-- `POST /api/budgets` - Create budget
-- `PUT /api/budgets/:id` - Update budget
-- `DELETE /api/budgets/:id` - Delete budget
-
-#### Stocks
-- `GET /api/stocks` - Get stock list
-- `GET /api/stocks/:symbol` - Get stock details
-- `GET /api/stocks/:symbol/analysis` - AI analysis
-- `POST /api/stocks/watchlist` - Add to watchlist
-
-#### Trading
-- `GET /api/trading/account` - Get trading account
-- `POST /api/trading/order` - Place order
-- `POST /api/trading/order/:id/execute` - Execute order
-- `GET /api/trading/portfolio` - Get portfolio
-
-#### Chatbot
-- `POST /api/v1/chatbot/query` - Send message with conversation history
-- `POST /api/v1/chatbot/save-chat` - Save chat conversation
-- `GET /api/v1/chatbot/chat-history` - Get all chat history
-- `DELETE /api/v1/chatbot/chat-history/:id` - Delete specific chat
-- `DELETE /api/v1/chatbot/chat-history` - Clear all chat history
-
-For complete API documentation, see [API.md](backend/docs/API.md)
-
----
-
-## 🧪 Testing
-
-### Backend Tests
-```bash
+# Install backend dependencies
 cd backend
-npm test
+npm install
+
+# Install frontend dependencies
+cd ../frontend
+npm install
 ```
 
-### Frontend Tests
+### Environment Configuration
+
+**Backend** (`backend/.env`):
+```env
+PORT=5000
+MONGODB_URI=mongodb://localhost:27017/finsync
+JWT_SECRET=your_jwt_secret
+JWT_REFRESH_SECRET=your_refresh_secret
+GEMINI_API_KEY=your_gemini_api_key
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+FRONTEND_URL=http://localhost:3000
+SENDGRID_API_KEY=your_sendgrid_api_key        # Optional: for email verification
+EMAIL_FROM=your_email@example.com              # Optional: sender email
+CLOUDINARY_CLOUD_NAME=your_cloud_name          # Optional: for profile images
+CLOUDINARY_API_KEY=your_cloudinary_key
+CLOUDINARY_API_SECRET=your_cloudinary_secret
+```
+
+**Frontend** (`frontend/.env`):
+```env
+NEXT_PUBLIC_API_URL=http://localhost:5000
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id
+NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
+```
+
+### Running Locally
+
 ```bash
+# Terminal 1 — Backend
+cd backend
+npm run dev          # Starts Express server on port 5000
+
+# Terminal 2 — Frontend
 cd frontend
-npm test
+npm run dev          # Starts Next.js dev server on port 3000
+
+# Terminal 3 — Python service (optional)
+cd python-service
+pip install -r requirements.txt
+python app.py        # Starts Flask server on port 5001
 ```
 
-### Run All Tests
-```bash
-npm test
-```
+Access the application at **http://localhost:3000**
 
 ---
 
-## 🤝 Contributing
+## API Overview
 
-We welcome contributions! Here's how you can help:
+The backend exposes **70+ RESTful endpoints** across 14 route modules, all prefixed under `/api`:
 
-1. **Fork the repository**
-2. **Create a feature branch**
-   ```bash
-   git checkout -b feature/amazing-feature
-   ```
-3. **Commit your changes**
-   ```bash
-   git commit -m "Add amazing feature"
-   ```
-4. **Push to the branch**
-   ```bash
-   git push origin feature/amazing-feature
-   ```
-5. **Open a Pull Request**
+| Module | Base Route | Endpoints | Description |
+|---|---|---|---|
+| Auth | `/api/auth` | 6 | Register, login, Google OAuth, email verification |
+| Transactions | `/api/v1/transactions` | 8 | CRUD + recurring transactions + analysis |
+| Budgets | `/api/v1/budgets` | 8 | CRUD + spend tracking + category sync |
+| Stocks | `/api/v1/stocks` | 7 | Search, detail, price, historical, real-time |
+| Stock Analysis | `/api/stocks-analysis` | 5 | AI analysis, comparison, suggestions |
+| Analysis | `/api/analysis` | 10 | AI insights, trends, patterns, breakdowns |
+| Trading | `/api/v1/trading` | 7 | Account, orders, holdings, stats, allocation |
+| Chatbot | `/api/v1/chatbot` | 11 | Query, insights, advice, sentiment, history |
+| Profile | `/api/v1/profile` | 5 | Profile CRUD, image upload, stats |
+| Export | `/api/export` | 4 | CSV, Excel, PDF, all-data export |
+| Users | `/api/v1/users` | 2 | Dashboard data, user stats |
+| Dashboard | `/api/dashboard` | 2 | Layout save/load |
+| Settings | `/api/settings` | 1 | App branding |
+| Stock Data | `/api/stock-data` | 1 | Raw stock data |
 
-### Development Guidelines
-
-- Follow existing code style
-- Write meaningful commit messages
-- Add tests for new features
-- Update documentation
-- Test thoroughly before submitting PR
+All protected endpoints require a JWT Bearer token in the `Authorization` header.
 
 ---
 
-## 🐛 Bug Reports
-
-Found a bug? Please open an issue with:
-- Clear description
-- Steps to reproduce
-- Expected vs actual behavior
-- Screenshots (if applicable)
-- Environment details
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 👨‍💻 Author
+## Author
 
 **Omkar Bhoir**
 
 - GitHub: [@whoknows1409](https://github.com/whoknows1409)
-- Repository: [finsync](https://github.com/whoknows1409/finsync)
-
----
-
-## 🙏 Acknowledgments
-
-- [Next.js](https://nextjs.org/) - React framework
-- [Express.js](https://expressjs.com/) - Backend framework
-- [MongoDB](https://www.mongodb.com/) - Database
-- [Google Gemini](https://ai.google.dev/) - AI model
-- [Yahoo Finance](https://finance.yahoo.com/) - Stock data
-- [shadcn/ui](https://ui.shadcn.com/) - UI components
-- [Radix UI](https://www.radix-ui.com/) - Primitives
-
----
-
-## 📞 Support
-
-Need help? Here are your options:
-
-- 📖 Read the [Documentation](#-documentation)
-- 🐛 Report issues on [GitHub Issues](https://github.com/whoknows1409/finsync/issues)
-- 💬 Start a [Discussion](https://github.com/whoknows1409/finsync/discussions)
-- 📧 Email: immortalomi14@gmail.com
-
----
-
-## 🗺️ Roadmap
-
-### Recently Completed
-- [x] Stop response button in chatbot
-- [x] Voice input/output modes
-- [x] Fixed pie chart label overlapping
-- [x] Chat export functionality (PDF, Text, WhatsApp)
-- [x] Improved chatbot UI with typing effects
-
-### Upcoming Features
-- [ ] Mobile app (React Native)
-- [ ] Multi-currency support
-- [ ] Cryptocurrency tracking
-- [ ] Investment portfolio analysis
-- [ ] Bill reminders
-- [ ] Family/shared budgets
-- [ ] Advanced analytics dashboard
-- [ ] Third-party bank integration
-- [ ] Chatbot conversation search
-
----
-
-## 📊 Project Stats
-
-![GitHub stars](https://img.shields.io/github/stars/whoknows1409/finsync?style=social)
-![GitHub forks](https://img.shields.io/github/forks/whoknows1409/finsync?style=social)
-![GitHub issues](https://img.shields.io/github/issues/whoknows1409/finsync)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/whoknows1409/finsync)
+- Email: immortalomi14@gmail.com
 
 ---
 
 <div align="center">
 
-**⭐ Star this repo if you find it helpful!**
+**Built with Next.js, Express, MongoDB, and Google Gemini AI**
 
-**Credits: Omkar Bhoir, Daksh Bari, Aditya Ghumare**
-
-[⬆ Back to Top](#-finsync---unified-finance-management-platform)
+**Contributors: Omkar Bhoir, Daksh Bari, Aditya Ghumare**
 
 </div>
