@@ -1,5 +1,8 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const mongoSanitize = require('express-mongo-sanitize');
+const hpp = require('hpp');
 const dotenv = require('dotenv');
 const path = require('path');
 const cookieParser = require('cookie-parser');
@@ -25,8 +28,12 @@ app.use(cors({
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      console.log('Origin not in whitelist but allowing:', origin);
-      callback(null, true); // Allow anyway for now to avoid blocking
+      // Reject unknown origins in production, allow in development
+      if (process.env.NODE_ENV === 'production') {
+        callback(new Error('CORS: Origin not allowed'));
+      } else {
+        callback(null, true);
+      }
     }
   },
   credentials: true,
@@ -37,37 +44,17 @@ app.use(cors({
   optionsSuccessStatus: 204
 }));
 
+// Security middleware
+app.use(helmet());                  // Set security HTTP headers
+app.use(mongoSanitize());           // Prevent NoSQL injection (sanitizes req.body, req.query, req.params)
+app.use(hpp());                     // Prevent HTTP parameter pollution
+
 // Increase payload size limits
-app.use(express.json({ limit: '50mb' })); // Increase JSON payload limit
-app.use(express.urlencoded({ limit: '50mb', extended: true })); // Increase URL-encoded payload limit
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 
 // Settings routes are registered in server.js
-
-// Test endpoint
-app.get('/api/test', (req, res) => {
-  res.json({ 
-    message: 'Backend is connected and working!',
-    timestamp: new Date().toISOString(),
-    server: 'Node.js/Express',
-    frontend: 'Connected from localhost:3000'
-  });
-});
-
-// In app.js, add this test endpoint
-app.get('/api/debug', (req, res) => {
-  res.json({ 
-    message: 'Debug endpoint works',
-    routes: {
-      auth: '/api/auth',
-      transactions: '/api/transactions',
-      export: '/api/export',
-      profile: '/api/profile',
-      stocks: '/api/stocks',
-      'stocks-analysis': '/api/stocks-analysis'
-    }
-  });
-});
 
 // Health check endpoint
 app.get('/health', (req, res) => {

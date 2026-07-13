@@ -149,10 +149,11 @@ exports.login = async (req, res) => {
     }
 
     // Check if user registered with Google OAuth
+    // SECURITY: Use generic message to prevent user/provider enumeration
     if (user.authProvider === 'google') {
-      return res.status(400).json({ 
+      return res.status(401).json({ 
         success: false,
-        message: 'This account was created with Google. Please sign in with Google.' 
+        message: 'Invalid email or password' 
       });
     }
 
@@ -229,28 +230,21 @@ exports.googleAuth = async (req, res) => {
     }
 
     let payload;
-    let isBase64Encoded = false;
 
-    // Try to parse as base64-encoded JSON first (from OAuth2 flow)
+    // Verify the Google ID token cryptographically via Google's API.
+    // SECURITY: Never trust unverified credentials (e.g. raw base64 JSON).
     try {
-      const decoded = Buffer.from(credential, 'base64').toString('utf-8');
-      payload = JSON.parse(decoded);
-      isBase64Encoded = true;
-    } catch (parseError) {
-      // If that fails, try verifying as JWT token (from One Tap flow)
-      try {
-        const ticket = await client.verifyIdToken({
-          idToken: credential,
-          audience: process.env.GOOGLE_CLIENT_ID,
-        });
-        payload = ticket.getPayload();
-      } catch (jwtError) {
-        console.error('❌ Failed to verify Google credential:', jwtError.message);
-        return res.status(401).json({ 
-          success: false,
-          message: 'Invalid Google credential' 
-        });
-      }
+      const ticket = await client.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      payload = ticket.getPayload();
+    } catch (verifyError) {
+      console.error('❌ Failed to verify Google credential:', verifyError.message);
+      return res.status(401).json({ 
+        success: false,
+        message: 'Invalid Google credential' 
+      });
     }
     
     if (!payload) {
@@ -275,11 +269,8 @@ exports.googleAuth = async (req, res) => {
       });
     }
 
-    // For base64-encoded data from OAuth2, we trust the email is verified
-    // For JWT, check the email_verified flag
-    const isEmailVerified = isBase64Encoded ? true : email_verified;
-
-    if (!isEmailVerified && !isBase64Encoded) {
+    // Google's verifyIdToken already validates the token — trust email_verified from the payload
+    if (!email_verified) {
       return res.status(400).json({ 
         success: false,
         message: 'Please use a verified Google account' 
