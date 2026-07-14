@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const mongoSanitize = require('express-mongo-sanitize');
-const hpp = require('hpp');
 const dotenv = require('dotenv');
 const path = require('path');
 const cookieParser = require('cookie-parser');
@@ -47,7 +46,6 @@ app.use(cors({
 // Security middleware
 app.use(helmet());                  // Set security HTTP headers
 app.use(mongoSanitize());           // Prevent NoSQL injection (sanitizes req.body, req.query, req.params)
-app.use(hpp());                     // Prevent HTTP parameter pollution
 
 // Increase payload size limits
 app.use(express.json({ limit: '50mb' }));
