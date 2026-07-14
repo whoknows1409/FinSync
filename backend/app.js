@@ -10,6 +10,10 @@ dotenv.config();
 
 const app = express();
 
+// Trust first proxy (Render's load balancer) so req.ip returns the real client IP.
+// Required for rate limiting to work correctly per-user instead of per-proxy.
+app.set('trust proxy', 1);
+
 // Middleware
 // Configure CORS to accept requests from frontend
 const allowedOrigins = [
