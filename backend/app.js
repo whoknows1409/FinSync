@@ -54,6 +54,14 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 
+// Catch JSON parse errors and return generic message
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ success: false, message: 'Invalid JSON in request body' });
+  }
+  next(err);
+});
+
 // Custom NoSQL injection sanitizer (Express 5 compatible)
 // express-mongo-sanitize tries to overwrite req.query which is read-only in Express 5,
 // so we sanitize req.body and req.params manually instead.

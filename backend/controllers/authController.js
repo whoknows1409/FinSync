@@ -39,6 +39,32 @@ exports.register = async (req, res) => {
       });
     }
 
+    // Sanitize: strip HTML tags from name to prevent stored XSS
+    const sanitizedName = String(name).replace(/<[^>]*>/g, '').trim();
+    if (!sanitizedName || sanitizedName.length < 1) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Please provide a valid name' 
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(String(email))) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Please provide a valid email address' 
+      });
+    }
+
+    // Validate password strength
+    if (String(password).length < 6) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Password must be at least 6 characters long' 
+      });
+    }
+
     // Check if user exists
     const userExists = await User.findOne({ email });
     if (userExists) {
@@ -64,7 +90,7 @@ exports.register = async (req, res) => {
 
     // Create user (not verified yet)
     user = await User.create({
-      name,
+      name: sanitizedName,
       email,
       password,
       authProvider: 'local',
