@@ -231,20 +231,48 @@ exports.googleAuth = async (req, res) => {
 
     let payload;
 
-    // Verify the Google ID token cryptographically via Google's API.
-    // SECURITY: Never trust unverified credentials (e.g. raw base64 JSON).
-    try {
-      const ticket = await client.verifyIdToken({
-        idToken: credential,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      payload = ticket.getPayload();
-    } catch (verifyError) {
-      console.error('❌ Failed to verify Google credential:', verifyError.message);
-      return res.status(401).json({ 
-        success: false,
-        message: 'Invalid Google credential' 
-      });
+    // Support two secure credential formats:
+    // 1. Access tokens from OAuth2 popup flow (prefixed with 'access_token:')
+    // 2. Google ID tokens from One Tap / Sign-In flow (JWT format)
+    // Both are verified server-side — no client-supplied data is trusted.
+
+    if (credential.startsWith('access_token:')) {
+      // OAuth2 popup flow: verify access token by calling Google's userinfo API server-side
+      const accessToken = credential.slice('access_token:'.length);
+      try {
+        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+
+        if (!userInfoResponse.ok) {
+          throw new Error(`Google userinfo API returned ${userInfoResponse.status}`);
+        }
+
+        payload = await userInfoResponse.json();
+        // Map Google userinfo fields to match ID token payload format
+        payload.email_verified = payload.email_verified ?? true;
+      } catch (fetchError) {
+        console.error('❌ Failed to verify Google access token:', fetchError.message);
+        return res.status(401).json({ 
+          success: false,
+          message: 'Invalid Google credential' 
+        });
+      }
+    } else {
+      // One Tap / ID token flow: verify JWT cryptographically via Google's API
+      try {
+        const ticket = await client.verifyIdToken({
+          idToken: credential,
+          audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        payload = ticket.getPayload();
+      } catch (verifyError) {
+        console.error('❌ Failed to verify Google credential:', verifyError.message);
+        return res.status(401).json({ 
+          success: false,
+          message: 'Invalid Google credential' 
+        });
+      }
     }
     
     if (!payload) {

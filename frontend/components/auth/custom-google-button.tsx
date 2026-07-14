@@ -100,35 +100,11 @@ export function CustomGoogleButton({ onGoogleSignIn, text }: CustomGoogleButtonP
             }
             
             if (tokenResponse.access_token) {
-              try {
-                // Exchange token for user info
-                const userInfoResponse = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo`, {
-                  headers: {
-                    Authorization: `Bearer ${tokenResponse.access_token}`
-                  }
-                })
-                
-                if (!userInfoResponse.ok) {
-                  throw new Error('Failed to fetch user info')
-                }
-                
-                const userInfo = await userInfoResponse.json()
-                
-                // Create a credential-like object for backward compatibility
-                const mockCredential = btoa(JSON.stringify({
-                  email: userInfo.email,
-                  name: userInfo.name,
-                  picture: userInfo.picture,
-                  sub: userInfo.sub
-                }))
-                
-                onGoogleSignIn(mockCredential)
-                setLoading(false)
-              } catch (err) {
-                console.error = originalError;
-                setError('Failed to retrieve user information')
-                setLoading(false)
-              }
+              // Send the access token directly to the backend for server-side verification.
+              // SECURITY: The backend will call Google's userinfo API to verify the token,
+              // instead of trusting client-supplied user data.
+              onGoogleSignIn(`access_token:${tokenResponse.access_token}`)
+              setLoading(false)
             } else {
               setError('Authentication failed: No token received')
               setLoading(false)
