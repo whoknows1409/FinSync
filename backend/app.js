@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const mongoSanitize = require('express-mongo-sanitize');
 const dotenv = require('dotenv');
 const path = require('path');
 const cookieParser = require('cookie-parser');
@@ -45,12 +44,32 @@ app.use(cors({
 
 // Security middleware
 app.use(helmet());                  // Set security HTTP headers
-app.use(mongoSanitize());           // Prevent NoSQL injection (sanitizes req.body, req.query, req.params)
 
 // Increase payload size limits
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
+
+// Custom NoSQL injection sanitizer (Express 5 compatible)
+// express-mongo-sanitize tries to overwrite req.query which is read-only in Express 5,
+// so we sanitize req.body and req.params manually instead.
+const sanitizeValue = (obj) => {
+  if (obj === null || typeof obj !== 'object') return obj;
+  for (const key of Object.keys(obj)) {
+    if (key.startsWith('$')) {
+      delete obj[key];
+    } else if (typeof obj[key] === 'object') {
+      sanitizeValue(obj[key]);
+    }
+  }
+  return obj;
+};
+
+app.use((req, res, next) => {
+  if (req.body) sanitizeValue(req.body);
+  if (req.params) sanitizeValue(req.params);
+  next();
+});
 
 // Settings routes are registered in server.js
 
