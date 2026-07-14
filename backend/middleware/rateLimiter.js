@@ -11,9 +11,6 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
-  keyGenerator: (req) => {
-    return req.ip;
-  }
 });
 
 // General API rate limit
