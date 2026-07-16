@@ -16,6 +16,10 @@ async function getYahooFinance() {
 }
 const logger = require('../utils/logger');
 const Stock = require('../models/Stock');
+const NodeCache = require('node-cache');
+
+// Cache for historical data to reduce Yahoo Finance API calls
+const historicalCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 
 // Test route
 router.get('/test', (req, res) => {
@@ -380,6 +384,14 @@ router.get('/:symbol/historical', async (req, res) => {
       stockSymbol += '.NS';
     }
     
+    // Check cache first
+    const cacheKey = `hist_${stockSymbol}_${timeframe}`;
+    const cached = historicalCache.get(cacheKey);
+    if (cached) {
+      logger.info(`Cache hit for ${cacheKey}`);
+      return res.json({ success: true, data: cached });
+    }
+
     const now = new Date();
     let period1, period2, interval;
     
@@ -434,105 +446,73 @@ router.get('/:symbol/historical', async (req, res) => {
         interval = '5m';
     }
     
+    const p1 = Math.floor(period1.getTime() / 1000);
+    const p2 = Math.floor(period2.getTime() / 1000);
     logger.info(`Fetching from Yahoo Finance: ${stockSymbol}, period1: ${period1.toISOString()}, period2: ${period2.toISOString()}, interval: ${interval}`);
     
-    try {
-      const p1 = Math.floor(period1.getTime() / 1000);
-      const p2 = Math.floor(period2.getTime() / 1000);
-      logger.info('Yahoo Finance query options:', { period1: period1.toISOString(), period2: period2.toISOString(), interval });
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(stockSymbol)}?period1=${p1}&period2=${p2}&interval=${encodeURIComponent(interval)}`;
-      const resp = await fetch(url);
-      if (!resp.ok) {
-        throw new Error(`Yahoo chart API responded ${resp.status}`);
-      }
-      const json = await resp.json();
-      const result = json?.chart?.result?.[0];
-      const timestamps = result?.timestamp || [];
-      const o = result?.indicators?.quote?.[0]?.open || [];
-      const h = result?.indicators?.quote?.[0]?.high || [];
-      const l = result?.indicators?.quote?.[0]?.low || [];
-      const c = result?.indicators?.quote?.[0]?.close || [];
-      const v = result?.indicators?.quote?.[0]?.volume || [];
+    // Try query2 first (less rate-limited), then query1 as fallback
+    const endpoints = [
+      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(stockSymbol)}?period1=${p1}&period2=${p2}&interval=${encodeURIComponent(interval)}`,
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(stockSymbol)}?period1=${p1}&period2=${p2}&interval=${encodeURIComponent(interval)}`
+    ];
 
-      if (!timestamps.length || !c.length) {
-        throw new Error('No historical data returned from Yahoo Finance');
-      }
+    let formattedData = null;
 
-      const formattedData = timestamps.map((ts, idx) => ({
-        time: new Date(ts * 1000).toISOString(),
-        open: Number(o[idx] ?? c[idx] ?? 0),
-        high: Number(h[idx] ?? c[idx] ?? 0),
-        low: Number(l[idx] ?? c[idx] ?? 0),
-        close: Number(c[idx] ?? 0),
-        volume: Number(v[idx] ?? 0),
-      }));
-
-      logger.info(`Fetched ${formattedData.length} data points for ${stockSymbol}`);
-      
-      res.json({
-        success: true,
-        data: formattedData
-      });
-    } catch (yfError) {
-      logger.error('Yahoo Finance API error:', yfError);
-      
-      // Try alternative approach for problematic timeframes
+    for (const url of endpoints) {
       try {
-        logger.info('Trying alternative approach for timeframe:', timeframe);
-        
-        let altPeriod1;
-        switch (timeframe) {
-          case '1W':
-            altPeriod1 = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
-            break;
-          case '1M':
-            altPeriod1 = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
-            break;
-          default:
-            altPeriod1 = period1;
-        }
-        
-        if (altPeriod1 !== period1) {
-          logger.info(`Trying with alternative period: ${altPeriod1.toISOString()}`);
-          const altHistorical = [];
-          
-          if (altHistorical && altHistorical.length > 0) {
-            const altFormattedData = altHistorical.map(item => ({
-              time: item.date.toISOString(),
-              open: item.open,
-              high: item.high,
-              low: item.low,
-              close: item.close,
-              volume: item.volume || 0
-            }));
-            
-            logger.info(`Successfully fetched ${altFormattedData.length} data points with alternative approach`);
-            
-            res.json({
-              success: true,
-              data: altFormattedData
-            });
-            return;
+        logger.info(`Trying: ${url.split('?')[0]}`);
+        const resp = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
           }
+        });
+
+        if (!resp.ok) {
+          logger.warn(`Yahoo chart API responded ${resp.status} from ${url.includes('query2') ? 'query2' : 'query1'}`);
+          continue;
         }
-        
-        throw yfError;
-      } catch (altError) {
-        logger.error('Alternative approach also failed:', altError);
-        
-        // For development, return mock data
-        if (process.env.NODE_ENV === 'development') {
-          const mockData = generateMockHistoricalData(timeframe);
-          return res.json({
-            success: true,
-            data: mockData,
-            warning: 'Using mock data due to API error'
-          });
+
+        const json = await resp.json();
+        const result = json?.chart?.result?.[0];
+        const timestamps = result?.timestamp || [];
+        const o = result?.indicators?.quote?.[0]?.open || [];
+        const h = result?.indicators?.quote?.[0]?.high || [];
+        const l = result?.indicators?.quote?.[0]?.low || [];
+        const c = result?.indicators?.quote?.[0]?.close || [];
+        const v = result?.indicators?.quote?.[0]?.volume || [];
+
+        if (!timestamps.length || !c.length) {
+          logger.warn('No data points in response, trying next endpoint');
+          continue;
         }
-        
-        throw new Error(`Failed to fetch historical data for ${timeframe} timeframe. Please try a different timeframe.`);
+
+        formattedData = timestamps.map((ts, idx) => ({
+          time: new Date(ts * 1000).toISOString(),
+          open: Number(o[idx] ?? c[idx] ?? 0),
+          high: Number(h[idx] ?? c[idx] ?? 0),
+          low: Number(l[idx] ?? c[idx] ?? 0),
+          close: Number(c[idx] ?? 0),
+          volume: Number(v[idx] ?? 0),
+        }));
+
+        break; // Success, stop trying endpoints
+      } catch (fetchErr) {
+        logger.warn(`Fetch failed for endpoint: ${fetchErr.message}`);
+        continue;
       }
     }
+
+    if (formattedData && formattedData.length > 0) {
+      // Cache the result (5 min for intraday, 30 min for daily+)
+      const cacheTTL = ['Live', '1D', '1W'].includes(timeframe) ? 300 : 1800;
+      historicalCache.set(cacheKey, formattedData, cacheTTL);
+
+      logger.info(`Fetched ${formattedData.length} data points for ${stockSymbol}`);
+      return res.json({ success: true, data: formattedData });
+    }
+
+    // All endpoints failed
+    throw new Error(`Failed to fetch historical data for ${timeframe} timeframe. Please try again later.`);
   } catch (error) {
     logger.error('Get historical data error:', error);
     res.status(500).json({
