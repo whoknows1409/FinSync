@@ -75,7 +75,8 @@ export default function StockComparison() {
     }
   }
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number | null | undefined) => {
+    if (amount == null || isNaN(amount)) return 'N/A'
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',

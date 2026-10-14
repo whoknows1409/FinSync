@@ -251,21 +251,7 @@ export const getStockDetails = async (symbol: string, interval: string = '1d', c
     return stock;
   } catch (error) {
     console.error('Error fetching stock details:', error);
-    
-    // Create a fallback stock object
-    return {
-      symbol: symbol.toUpperCase(),
-      name: symbol.toUpperCase(),
-      interval: interval,
-      currentPrice: 100,
-      previousClose: 100,
-      change: 0,
-      changePercent: 0,
-      marketCap: 0,
-      volume: 0,
-      sector: 'Unknown',
-      lastUpdated: new Date()
-    };
+    throw new Error('Failed to fetch stock details');
   }
 };
 
