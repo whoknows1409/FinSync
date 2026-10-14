@@ -221,21 +221,42 @@ async function loadQuote(symbol) {
   };
 }
 
-// Throws MarketDataError: status 400 for a blank symbol, 404 when Yahoo has no such
-// symbol, 502 when Yahoo can't be reached.
-async function getQuote(rawSymbol) {
+// Daily closes over the last `days` calendar days, ending on the live price.
+// Yahoo leaves the latest session's close null in the daily series.
+async function loadDailyHistory(symbol, days) {
+  const chart = await fetchDailyChart(symbol, CHART_TTL);
+  const { meta } = chart;
+  const offset = meta.gmtoffset || 0;
+  const sessionDate = localDate(meta.regularMarketTime, offset);
+  const since = localDate(meta.regularMarketTime - days * DAY_SECONDS, offset);
+
+  const points = toDailyBars(chart)
+    .filter(bar => bar.date > since && bar.date < sessionDate)
+    .map(({ date, close }) => ({ date, close }));
+  points.push({ date: sessionDate, close: meta.regularMarketPrice });
+  return points;
+}
+
+// Bare NSE tickers (e.g. "WIPRO") only resolve on Yahoo with the .NS suffix,
+// so retry with it when the symbol as given isn't found.
+async function withNseFallback(rawSymbol, load) {
   const symbol = String(rawSymbol || '').trim().toUpperCase();
   if (!symbol) throw new MarketDataError('Stock symbol is required', 400);
 
   try {
-    return await loadQuote(symbol);
+    return await load(symbol);
   } catch (err) {
-    // Bare NSE tickers (e.g. "WIPRO") only resolve on Yahoo with the .NS suffix
     if (err.status === 404 && !/[.^=]/.test(symbol)) {
-      return loadQuote(`${symbol}.NS`);
+      return load(`${symbol}.NS`);
     }
     throw err;
   }
 }
 
-module.exports = { getQuote, MarketDataError };
+// Both throw MarketDataError: status 400 for a blank symbol, 404 when Yahoo has
+// no such symbol, 502 when Yahoo can't be reached.
+const getQuote = rawSymbol => withNseFallback(rawSymbol, loadQuote);
+const getDailyHistory = (rawSymbol, days) =>
+  withNseFallback(rawSymbol, symbol => loadDailyHistory(symbol, days));
+
+module.exports = { getQuote, getDailyHistory, MarketDataError };

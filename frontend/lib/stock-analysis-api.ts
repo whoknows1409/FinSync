@@ -35,6 +35,7 @@ export interface StockAnalysisData {
   change?: number | null;
   changePercent?: number | null;
   monthlyChange?: number | null;
+  marketState?: 'REGULAR' | 'CLOSED';
 }
 
 // Get stock analysis data with all required fields

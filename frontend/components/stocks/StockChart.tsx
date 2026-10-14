@@ -36,6 +36,7 @@ interface StockChartProps {
   timeRange?: '7d' | '1mo' | '6mo'
   onTimeRangeChange?: (range: '7d' | '1mo' | '6mo') => void
   externalTimeRange?: '7d' | '1mo' | '6mo'
+  livePrice?: number
 }
 
 interface HistoricalData {
@@ -48,9 +49,10 @@ export default function StockChart({
   name, 
   timeRange: timeRangeProp = '1mo',
   onTimeRangeChange,
-  externalTimeRange
+  externalTimeRange,
+  livePrice
 }: StockChartProps) {
-  const [historicalData, setHistoricalData] = useState<HistoricalData[]>([])
+  const [fetchedData, setFetchedData] = useState<HistoricalData[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const chartRef = useRef<any>(null)
@@ -59,6 +61,11 @@ export default function StockChart({
   const [internalTimeRange, setInternalTimeRange] = useState<'7d' | '1mo' | '6mo'>(timeRangeProp)
   
   const currentTimeRange = externalTimeRange || internalTimeRange
+
+  // The last point is the current session; keep it in step with the live quote between refetches
+  const historicalData = livePrice != null && fetchedData.length > 0
+    ? [...fetchedData.slice(0, -1), { ...fetchedData[fetchedData.length - 1], close: livePrice }]
+    : fetchedData
 
   // Calculate price change
   const priceChange = historicalData.length > 1 
@@ -83,11 +90,11 @@ export default function StockChart({
       }
       
       const data = await response.json()
-      setHistoricalData(data)
+      setFetchedData(data)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error fetching historical data'
       setError(message)
-      setHistoricalData([])
+      setFetchedData([])
     } finally {
       setLoading(false)
     }
