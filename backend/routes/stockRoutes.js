@@ -310,6 +310,7 @@ router.get('/:symbol/historical', async (req, res) => {
           continue;
         }
 
+        // Skip bars Yahoo hasn't filled in (null close) instead of plotting them at 0
         formattedData = timestamps.map((ts, idx) => ({
           time: new Date(ts * 1000).toISOString(),
           open: Number(o[idx] ?? c[idx] ?? 0),
@@ -317,7 +318,7 @@ router.get('/:symbol/historical', async (req, res) => {
           low: Number(l[idx] ?? c[idx] ?? 0),
           close: Number(c[idx] ?? 0),
           volume: Number(v[idx] ?? 0),
-        }));
+        })).filter((_, idx) => c[idx] != null);
 
         break; // Success, stop trying endpoints
       } catch (fetchErr) {

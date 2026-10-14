@@ -91,6 +91,27 @@ export default function EnhancedStockAnalysis() {
     }
   }
 
+  // Keep the quote live: refresh every 15s while the market is open, every minute
+  // otherwise so the page notices when it opens. Skipped while the tab is hidden.
+  useEffect(() => {
+    const symbol = stockData?.symbol
+    if (!symbol) return
+
+    const delay = stockData?.marketState === 'REGULAR' ? 15000 : 60000
+    const id = setInterval(async () => {
+      if (document.hidden) return
+      try {
+        const fresh = await getStockAnalysisData(symbol)
+        // Ignore a late response if the user has moved on to another stock
+        setStockData(current => (current?.symbol === fresh.symbol ? fresh : current))
+      } catch (err) {
+        // Keep showing the last good quote; the next tick retries
+        console.warn('Live quote refresh failed:', err)
+      }
+    }, delay)
+    return () => clearInterval(id)
+  }, [stockData?.symbol, stockData?.marketState])
+
   const fetchAnalysis = async (stock: StockAnalysisData, retryCount = 0) => {
     setAnalysisLoading(true)
     try {
@@ -278,6 +299,9 @@ export default function EnhancedStockAnalysis() {
     }
   }
 
+  const formatAsOf = (iso: string) =>
+    new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', second: '2-digit' })
+
   const formatRange = (low: number | null | undefined, high: number | null | undefined) => {
     if (low == null || high == null) return 'N/A'
     return `${formatCurrency(low)} - ${formatCurrency(high)}`
@@ -321,6 +345,7 @@ export default function EnhancedStockAnalysis() {
                 {popularStocks.map((stock) => (
                   <Button
                     key={stock.symbol}
+                    type="button"
                     variant="outline"
                     size="sm"
                     onClick={() => handlePopularStockClick(stock.symbol)}
@@ -383,7 +408,19 @@ export default function EnhancedStockAnalysis() {
                     <Building2 className="h-5 w-5" />
                     {stockData.name} ({stockData.symbol.replace('.NS', '')})
                   </CardTitle>
-                  <CardDescription>Comprehensive stock data from NSE</CardDescription>
+                  <CardDescription className="flex flex-wrap items-center gap-2 mt-1">
+                    {stockData.marketState === 'REGULAR' ? (
+                      <Badge className="gap-1.5 bg-green-600 text-white hover:bg-green-600">
+                        <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                        Live
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">Market closed</Badge>
+                    )}
+                    {stockData.lastUpdated && (
+                      <span>Last trade {formatAsOf(stockData.lastUpdated)}</span>
+                    )}
+                  </CardDescription>
                 </div>
                 <Button
                   variant="ghost"
@@ -421,7 +458,7 @@ export default function EnhancedStockAnalysis() {
           </Card>
 
           {/* Price Trend Visualization */}
-          <StockChart symbol={stockData.symbol} />
+          <StockChart symbol={stockData.symbol} livePrice={stockData.currentPrice} />
 
           {analysisLoading && (
             <Card>

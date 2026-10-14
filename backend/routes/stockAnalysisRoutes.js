@@ -27,76 +27,17 @@ router.get('/stock-data', async (req, res) => {
   }
 });
 
+const PERIOD_DAYS = { '7d': 7, '1mo': 30, '6mo': 180 };
+
 // Route to get historical data for charts
 router.get('/historical-data', async (req, res) => {
   try {
     const { symbol, period = '1mo' } = req.query;
-    
-    if (!symbol) {
-      return res.status(400).json({ error: 'Stock symbol is required' });
-    }
-
-    // Determine the period for historical data
-    let period1, period2;
-    const now = new Date();
-    
-    switch (period) {
-      case '7d':
-        period1 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case '1mo':
-        period1 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        break;
-      case '6mo':
-        period1 = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
-        break;
-      default:
-        period1 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
-    
-    period2 = now;
-
-    // Fetch from Yahoo public chart API (no key required)
-    const p1 = Math.floor(period1.getTime() / 1000);
-    const p2 = Math.floor(period2.getTime() / 1000);
-    const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`);
-    url.searchParams.set('period1', String(p1));
-    url.searchParams.set('period2', String(p2));
-    url.searchParams.set('interval', '1d');
-    url.searchParams.set('events', 'div,splits');
-
-    const resp = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Finsync/1.0)'
-      }
-    });
-    if (!resp.ok) {
-      throw new Error(`Yahoo chart API ${resp.status}`);
-    }
-    const json = await resp.json();
-    const result = json?.chart?.result?.[0];
-    const timestamps = result?.timestamp || [];
-    const closes = result?.indicators?.quote?.[0]?.close || [];
-    const data = timestamps.map((ts, i) => ({
-      date: new Date(ts * 1000).toISOString().split('T')[0],
-      close: Number(closes[i] ?? 0)
-    })).filter(p => !isNaN(p.close));
-    return res.json(data);
+    const data = await marketData.getDailyHistory(symbol, PERIOD_DAYS[period] || PERIOD_DAYS['1mo']);
+    res.json(data);
   } catch (error) {
     logger.error('Error fetching historical data:', error);
-    if (process.env.NODE_ENV === 'development') {
-      // simple synthetic series
-      const now = new Date();
-      const points = 30;
-      let base = 100;
-      const mock = Array.from({ length: points }).map((_, i) => {
-        const t = new Date(now.getTime() - (points - i) * 24 * 60 * 60 * 1000);
-        base += (Math.random() - 0.5) * 2;
-        return { date: t, close: Number(base.toFixed(2)) };
-      });
-      return res.json(mock);
-    }
-    res.status(500).json({ error: 'Failed to fetch historical data' });
+    sendMarketDataError(res, error);
   }
 });
 
