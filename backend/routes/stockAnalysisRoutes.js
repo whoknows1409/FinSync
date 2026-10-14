@@ -1,84 +1,29 @@
 const express = require('express');
 const router = express.Router();
 
-let yahooFinanceInstance;
-async function getYahooFinance() {
-  if (!yahooFinanceInstance) {
-    const mod = (await import('yahoo-finance2')).default;
-    // v3 exports a class (needs `new`), v2 exports a ready-to-use object
-    if (typeof mod === 'function') {
-      yahooFinanceInstance = new mod();
-    } else {
-      yahooFinanceInstance = mod;
-    }
-  }
-  return yahooFinanceInstance;
-}
 const logger = require('../utils/logger');
 const geminiService = require('../services/geminiService'); // This is correct
+const marketData = require('../services/marketDataService');
+const { protect } = require('../middleware/auth');
 
-// Helper function to format stock data with fallbacks
-function formatStockData(quote) {
-  return {
-    symbol: quote.symbol,
-    name: quote.longName || quote.shortName || quote.price?.longName || quote.price?.shortName || 'Unknown',
-    currentPrice: quote.regularMarketPrice || quote.price?.regularMarketPrice || 0,
-    previousClose: quote.regularMarketPreviousClose || quote.price?.regularMarketPreviousClose || 0,
-    marketCap: quote.marketCap || quote.price?.marketCap || 0,
-    peRatio: quote.trailingPE || quote.summaryDetail?.trailingPE || quote.price?.trailingPE || null,
-    dividendYield: quote.dividendYield || quote.summaryDetail?.dividendYield || quote.price?.dividendYield || null,
-    fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh || quote.summaryDetail?.fiftyTwoWeekHigh || quote.price?.fiftyTwoWeekHigh || null,
-    fiftyTwoWeekLow: quote.fiftyTwoWeekLow || quote.summaryDetail?.fiftyTwoWeekLow || quote.price?.fiftyTwoWeekLow || null,
-    volume: quote.regularMarketVolume || quote.price?.regularMarketVolume || 0,
-    averageVolume: quote.averageDailyVolume3Month || quote.averageDailyVolume10Day || quote.price?.averageDailyVolume3Month || 0,
-    beta: quote.beta || quote.defaultKeyStatistics?.beta || quote.price?.beta || null
-  };
+function sendMarketDataError(res, error) {
+  if (error.status === 404) {
+    return res.status(404).json({ error: 'Stock not found. Please enter a valid NSE stock symbol.' });
+  }
+  if (error.status === 400) {
+    return res.status(400).json({ error: error.message });
+  }
+  return res.status(502).json({ error: 'Market data is temporarily unavailable. Please try again shortly.' });
 }
 
 // Route to get stock data
 router.get('/stock-data', async (req, res) => {
   try {
-    const { symbol } = req.query;
-    
-    if (!symbol) {
-      return res.status(400).json({ error: 'Stock symbol is required' });
-    }
-
-    // Fetch stock data from Yahoo Finance with enhanced modules
-    const quote = await (await getYahooFinance()).quote(symbol);
-    
-    // Format stock data with fallbacks
-    let stockData = formatStockData(quote);
-    
-    // If 52-week high/low are not available, fetch from historical data
-    // Skip historical enrichment; not supported in current yahoo-finance2 build
-
+    const stockData = await marketData.getQuote(req.query.symbol);
     res.json(stockData);
   } catch (error) {
     logger.error('Error fetching stock data:', error);
-    if (process.env.NODE_ENV === 'development') {
-      // Return minimal mock to keep UI functional in dev
-      const symbol = String(req.query.symbol || 'UNKNOWN').toUpperCase();
-      return res.json({
-        symbol,
-        name: symbol,
-        currentPrice: 100,
-        previousClose: 100,
-        marketCap: 0,
-        peRatio: null,
-        dividendYield: null,
-        fiftyTwoWeekHigh: 0,
-        fiftyTwoWeekLow: 0,
-        volume: 0,
-        averageVolume: 0,
-        beta: null
-      });
-    }
-    // Handle specific error for invalid stock symbols
-    if (error.message.includes('Invalid symbol') || error.message.includes('No data found')) {
-      return res.status(404).json({ error: 'Stock not found. Please enter a valid NSE stock symbol.' });
-    }
-    res.status(500).json({ error: 'Failed to fetch stock data' });
+    sendMarketDataError(res, error);
   }
 });
 
@@ -157,70 +102,23 @@ router.get('/historical-data', async (req, res) => {
 
 // Route to compare two stocks
 router.get('/compare', async (req, res) => {
-  // Set CORS headers explicitly for this endpoint
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
-
   try {
-    console.log('=== Stock Comparison Request ===');
-    console.log('Query params:', req.query);
-    console.log('Origin:', req.headers.origin);
-    
     const { symbol1, symbol2 } = req.query;
     
     if (!symbol1 || !symbol2) {
-      console.log('ERROR: Missing symbols in request');
       return res.status(400).json({ error: 'Both stock symbols are required' });
     }
 
-    console.log(`Fetching data for ${symbol1} and ${symbol2}`);
-
-    // Fetch data for both stocks with timeout and better error handling
-    const fetchWithTimeout = (promise, timeout = 15000) => {
-      return Promise.race([
-        promise,
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timeout after 15 seconds')), timeout)
-        )
-      ]);
-    };
-
-    let quote1, quote2;
+    let stock1, stock2;
     try {
-      const yahooFinance = await getYahooFinance();
-      [quote1, quote2] = await Promise.all([
-        fetchWithTimeout(yahooFinance.quote(symbol1)).catch(err => {
-          console.error(`Error fetching ${symbol1}:`, err.message);
-          throw new Error(`Failed to fetch data for ${symbol1}: ${err.message}`);
-        }),
-        fetchWithTimeout(yahooFinance.quote(symbol2)).catch(err => {
-          console.error(`Error fetching ${symbol2}:`, err.message);
-          throw new Error(`Failed to fetch data for ${symbol2}: ${err.message}`);
-        })
+      [stock1, stock2] = await Promise.all([
+        marketData.getQuote(symbol1),
+        marketData.getQuote(symbol2)
       ]);
     } catch (fetchError) {
-      console.error('Yahoo Finance fetch error:', fetchError);
-      return res.status(500).json({ 
-        error: 'Failed to fetch stock data from Yahoo Finance',
-        details: fetchError.message
-      });
+      logger.error('Error fetching comparison data:', fetchError);
+      return sendMarketDataError(res, fetchError);
     }
-
-    console.log('Successfully fetched stock data from Yahoo Finance');
-
-    // Format stock data with fallbacks
-    let stock1 = formatStockData(quote1);
-    let stock2 = formatStockData(quote2);
-
-    // Calculate monthly change for both stocks (approximate as 0 in this build)
-    const monthlyChange1 = 0;
-    const monthlyChange2 = 0;
-
-    // Add monthly change to stock data
-    stock1.monthlyChange = monthlyChange1;
-    stock2.monthlyChange = monthlyChange2;
 
     console.log('Generating AI comparison summary');
 
@@ -234,8 +132,8 @@ router.get('/compare', async (req, res) => {
       console.error('AI comparison failed, using fallback:', aiError);
       aiSummary = `Comparison between ${stock1.name} (${stock1.symbol}) and ${stock2.name} (${stock2.symbol}): 
       
-${stock1.name} is trading at ₹${stock1.currentPrice.toFixed(2)} with a market cap of ₹${(stock1.marketCap / 10000000).toFixed(2)} Cr.
-${stock2.name} is trading at ₹${stock2.currentPrice.toFixed(2)} with a market cap of ₹${(stock2.marketCap / 10000000).toFixed(2)} Cr.
+${stock1.name} is trading at ₹${stock1.currentPrice.toFixed(2)} with a market cap of ₹${((stock1.marketCap || 0) / 10000000).toFixed(2)} Cr.
+${stock2.name} is trading at ₹${stock2.currentPrice.toFixed(2)} with a market cap of ₹${((stock2.marketCap || 0) / 10000000).toFixed(2)} Cr.
 
 Please analyze the detailed metrics below to make an informed investment decision.`;
     }
@@ -293,31 +191,14 @@ router.post('/stock-analysis', async (req, res) => {
       beta: stock.beta ? Number(stock.beta) : null
     };
 
-    // If 52-week high/low are missing, fetch from historical data
+    // If 52-week high/low are missing, take them from a live quote
     if (!formattedStock.fiftyTwoWeekHigh || !formattedStock.fiftyTwoWeekLow) {
       try {
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setFullYear(endDate.getFullYear() - 1);
-        
-        const chartResult = await (await getYahooFinance()).chart(formattedStock.symbol, {
-          period1: startDate,
-          period2: endDate,
-          interval: '1wk'
-        });
-        const historical = (chartResult?.quotes || []).filter(item => item.close != null);
-        
-        if (historical && historical.length > 0) {
-          const prices = historical.map(item => item.high);
-          const lowPrices = historical.map(item => item.low);
-          
-          formattedStock.fiftyTwoWeekHigh = Math.max(...prices);
-          formattedStock.fiftyTwoWeekLow = Math.min(...lowPrices);
-          
-          console.log(`Fetched 52-week high/low from historical data for analysis: ${formattedStock.fiftyTwoWeekHigh}, ${formattedStock.fiftyTwoWeekLow}`);
-        }
-      } catch (histError) {
-        console.error('Error fetching historical data for 52-week range in analysis:', histError);
+        const quote = await marketData.getQuote(formattedStock.symbol);
+        formattedStock.fiftyTwoWeekHigh = quote.fiftyTwoWeekHigh;
+        formattedStock.fiftyTwoWeekLow = quote.fiftyTwoWeekLow;
+      } catch (quoteError) {
+        logger.warn(`Could not fetch 52-week range for ${formattedStock.symbol}: ${quoteError.message}`);
       }
     }
 
@@ -341,14 +222,14 @@ router.post('/stock-analysis', async (req, res) => {
 });
 
 // Route to get personal stock suggestions based on user's financial data
-router.post('/personal-suggestions', async (req, res) => {
+router.post('/personal-suggestions', protect, async (req, res) => {
   try {
-    console.log('Personal suggestions request received:', req.body);
+    const { stock } = req.body;
+    // Always the caller's own data; never trust a user ID from the request body
+    const userId = req.user._id;
     
-    const { stock, userId } = req.body;
-    
-    if (!stock || !userId) {
-      return res.status(400).json({ error: 'Stock data and user ID are required' });
+    if (!stock) {
+      return res.status(400).json({ error: 'Stock data is required' });
     }
 
     // Fetch user's transactions

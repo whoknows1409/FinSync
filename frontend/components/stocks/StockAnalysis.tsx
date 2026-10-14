@@ -84,18 +84,8 @@ export default function EnhancedStockAnalysis() {
       fetchAnalysis(stock)
     } catch (err: any) {
       console.error('Stock fetch error:', err);
-      
-      // Check if the error is related to invalid stock symbol
-      if (err.message && (
-          err.message.includes('not found') || 
-          err.message.includes('Invalid symbol') ||
-          err.message.includes('No data found') ||
-          err.message.includes('Failed to fetch')
-      )) {
-        setError('Stock not found. Please enter a valid NSE stock symbol.');
-      } else {
-        setError(err.message || 'Error fetching stock data');
-      }
+      setStockData(null)
+      setError(err.message || 'Error fetching stock data')
     } finally {
       setLoading(false)
     }
@@ -167,10 +157,7 @@ export default function EnhancedStockAnalysis() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
-        body: JSON.stringify({ 
-          stock, 
-          userId: user.id 
-        }),
+        body: JSON.stringify({ stock }),
       });
       
       if (!response.ok) {
@@ -184,7 +171,7 @@ export default function EnhancedStockAnalysis() {
           throw new Error(`Server returned ${response.status}: ${errorText.substring(0, 100)}`);
         }
         console.error('Error response:', errorData);
-        throw new Error(errorData.error || `Failed with status ${response.status}`);
+        throw new Error(errorData.error || errorData.message || `Failed with status ${response.status}`);
       }
       
       const data = await response.json();
@@ -232,9 +219,9 @@ export default function EnhancedStockAnalysis() {
       // Basic validation for stock symbols
       const symbol = searchQuery.trim().toUpperCase()
       
-      // Check if symbol contains only letters and numbers
-      if (!/^[A-Z0-9]+$/.test(symbol)) {
-        setError('Stock symbol should only contain letters and numbers');
+      // NSE symbols can contain & and - (e.g. M&M, BAJAJ-AUTO)
+      if (!/^[A-Z0-9&-]+(\.NS)?$/.test(symbol)) {
+        setError('Stock symbol should only contain letters, numbers, & and -');
         return;
       }
       
@@ -252,7 +239,7 @@ export default function EnhancedStockAnalysis() {
 
   // Format currency in Indian Rupees
   const formatCurrency = (amount: number | null | undefined) => {
-    if (amount === null || amount === undefined || isNaN(amount)) return '₹0.00'
+    if (amount === null || amount === undefined || isNaN(amount)) return 'N/A'
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
@@ -291,12 +278,9 @@ export default function EnhancedStockAnalysis() {
     }
   }
 
-  // Calculate price change percentage
-  const calculatePriceChange = () => {
-    if (!stockData || !stockData.previousClose || stockData.previousClose === 0) return 0
-    const change = stockData.currentPrice - stockData.previousClose
-    const changePercent = (change / stockData.previousClose) * 100
-    return changePercent
+  const formatRange = (low: number | null | undefined, high: number | null | undefined) => {
+    if (low == null || high == null) return 'N/A'
+    return `${formatCurrency(low)} - ${formatCurrency(high)}`
   }
 
   return (
@@ -429,7 +413,7 @@ export default function EnhancedStockAnalysis() {
                 <div>
                   <p className="text-sm text-muted-foreground">52W Range</p>
                   <p className="text-xl font-semibold">
-                    {formatCurrency(stockData.fiftyTwoWeekLow)} - {formatCurrency(stockData.fiftyTwoWeekHigh)}
+                    {formatRange(stockData.fiftyTwoWeekLow, stockData.fiftyTwoWeekHigh)}
                   </p>
                 </div>
               </div>
@@ -811,14 +795,18 @@ export default function EnhancedStockAnalysis() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground dark:text-muted-foreground">Day's Change</span>
-                    <span className={`font-medium flex items-center ${calculatePriceChange() >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {calculatePriceChange() >= 0 ? (
-                        <TrendingUp className="h-4 w-4 mr-1" />
-                      ) : (
-                        <TrendingDown className="h-4 w-4 mr-1" />
-                      )}
-                      {formatCurrency(stockData.currentPrice - stockData.previousClose)} ({calculatePriceChange().toFixed(2)}%)
-                    </span>
+                    {stockData.change != null && stockData.changePercent != null ? (
+                      <span className={`font-medium flex items-center ${stockData.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {stockData.change >= 0 ? (
+                          <TrendingUp className="h-4 w-4 mr-1" />
+                        ) : (
+                          <TrendingDown className="h-4 w-4 mr-1" />
+                        )}
+                        {formatCurrency(stockData.change)} ({stockData.changePercent.toFixed(2)}%)
+                      </span>
+                    ) : (
+                      <span className="font-medium">N/A</span>
+                    )}
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground dark:text-muted-foreground">Market Cap</span>
@@ -826,7 +814,7 @@ export default function EnhancedStockAnalysis() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground dark:text-muted-foreground">P/E Ratio</span>
-                    <span className="font-medium">{stockData.peRatio ? stockData.peRatio.toFixed(2) : 'N/A'}</span>
+                    <span className="font-medium">{stockData.peRatio != null ? stockData.peRatio.toFixed(2) : 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground dark:text-muted-foreground">Dividend Yield</span>
@@ -844,7 +832,7 @@ export default function EnhancedStockAnalysis() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground dark:text-muted-foreground">Beta</span>
-                    <span className="font-medium">{stockData.beta ? stockData.beta.toFixed(2) : 'N/A'}</span>
+                    <span className="font-medium">{stockData.beta != null ? stockData.beta.toFixed(2) : 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground dark:text-muted-foreground">52W High</span>
@@ -857,7 +845,7 @@ export default function EnhancedStockAnalysis() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground dark:text-muted-foreground">52W Range</span>
                     <span className="font-medium text-xs">
-                      {formatCurrency(stockData.fiftyTwoWeekLow)} - {formatCurrency(stockData.fiftyTwoWeekHigh)}
+                      {formatRange(stockData.fiftyTwoWeekLow, stockData.fiftyTwoWeekHigh)}
                     </span>
                   </div>
                 </div>

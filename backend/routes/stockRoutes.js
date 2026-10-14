@@ -1,22 +1,55 @@
 // backend/routes/stockRoutes.js
 const express = require('express');
 const router = express.Router();
-let yahooFinanceInstance;
-async function getYahooFinance() {
-  if (!yahooFinanceInstance) {
-    const mod = (await import('yahoo-finance2')).default;
-    // v3 exports a class (needs `new`), v2 exports a ready-to-use object
-    if (typeof mod === 'function') {
-      yahooFinanceInstance = new mod();
-    } else {
-      yahooFinanceInstance = mod;
-    }
-  }
-  return yahooFinanceInstance;
-}
 const logger = require('../utils/logger');
 const Stock = require('../models/Stock');
 const NodeCache = require('node-cache');
+const marketData = require('../services/marketDataService');
+
+// Well-known NSE tickers that get the .NS suffix when given bare
+const INDIAN_STOCKS = ['SBIN', 'RELIANCE', 'TCS', 'INFY', 'HDFC', 'ICICIBANK', 'HINDUNILVR', 'ITC', 'KOTAKBANK', 'L&T'];
+
+function toYahooSymbol(symbol) {
+  const upper = String(symbol).toUpperCase();
+  return INDIAN_STOCKS.includes(upper) ? `${upper}.NS` : upper;
+}
+
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Refresh the saved Stock document from a live quote, so search results and
+// gainers/losers don't keep the price from when a symbol was first looked up
+async function saveQuote(quote, interval) {
+  try {
+    return await Stock.findOneAndUpdate(
+      { symbol: quote.symbol },
+      {
+        $set: {
+          name: quote.name,
+          interval,
+          currentPrice: quote.currentPrice,
+          previousClose: quote.previousClose,
+          change: quote.change ?? 0,
+          changePercent: quote.changePercent ?? 0,
+          volume: quote.volume,
+          marketCap: quote.marketCap,
+          lastUpdated: new Date(),
+        },
+        $setOnInsert: { sector: 'Unknown' },
+      },
+      { upsert: true, new: true }
+    );
+  } catch (error) {
+    logger.warn(`Could not save ${quote.symbol} to database: ${error.message}`);
+    return null;
+  }
+}
+
+function sendMarketDataError(res, error, message) {
+  if (error.status === 404) {
+    return res.status(404).json({ success: false, message: 'Stock not found. Please check the symbol and try again.' });
+  }
+  res.status(error.status === 400 ? 400 : 502).json({ success: false, message });
+}
 
 // Cache for historical data to reduce Yahoo Finance API calls
 const historicalCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
@@ -34,7 +67,7 @@ router.get('/test', (req, res) => {
 router.get('/health', async (req, res) => {
   try {
     // Test Yahoo Finance connectivity
-    await (await getYahooFinance()).quote('RELIANCE.NS');
+    await marketData.getQuote('RELIANCE.NS');
     
     res.json({
       success: true,
@@ -53,7 +86,7 @@ router.get('/health', async (req, res) => {
   }
 });
 
-// @desc    Search stocks by symbol or name with improved error handling
+// @desc    Search stocks by symbol or name
 // @route   GET /api/v1/stocks/search
 // @access  Public
 router.get('/search', async (req, res) => {
@@ -68,10 +101,11 @@ router.get('/search', async (req, res) => {
     }
 
     // Try to find in our database first
+    const pattern = escapeRegex(String(q));
     const dbStocks = await Stock.find({
       $or: [
-        { symbol: { $regex: q, $options: 'i' } },
-        { name: { $regex: q, $options: 'i' } }
+        { symbol: { $regex: pattern, $options: 'i' } },
+        { name: { $regex: pattern, $options: 'i' } }
       ]
     }).limit(20);
 
@@ -85,285 +119,75 @@ router.get('/search', async (req, res) => {
     }
 
     // If not found in database, fetch from Yahoo Finance
-    let symbol = q.toUpperCase();
-    
-    // Add .NS suffix for Indian stocks if not present
-    const indianStocks = ['SBIN', 'RELIANCE', 'TCS', 'INFY', 'HDFC', 'ICICIBANK', 'HINDUNILVR', 'ITC', 'KOTAKBANK', 'L&T'];
-    if (indianStocks.includes(symbol) && !symbol.endsWith('.NS') && !symbol.endsWith('.BSE')) {
-      symbol += '.NS';
-    }
-
-    logger.info(`Fetching from Yahoo Finance: ${symbol}`);
-    
-    // Add retry logic
-    let quote = null;
-    let retryCount = 0;
-    const maxRetries = 3;
-    
-    while (retryCount < maxRetries) {
-      try {
-        quote = await (await getYahooFinance()).quote(symbol);
-        break;
-      } catch (retryError) {
-        retryCount++;
-        logger.warn(`Retry ${retryCount}/${maxRetries} for ${symbol}:`, retryError.message);
-        
-        if (retryCount >= maxRetries) {
-          throw retryError;
-        }
-        
-        // Wait before retry (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
-      }
-    }
-    
-    if (!quote) {
-      throw new Error('Failed to fetch stock data after retries');
-    }
-
-    // Fetch beta from quoteSummary (not available in quote())
-    let beta = 0;
+    let quote;
     try {
-      const summary = await (await getYahooFinance()).quoteSummary(symbol, { modules: ['defaultKeyStatistics'] });
-      beta = summary?.defaultKeyStatistics?.beta || 0;
-    } catch (betaErr) {
-      logger.warn(`Could not fetch beta for ${symbol}:`, betaErr.message);
+      quote = await marketData.getQuote(toYahooSymbol(q));
+    } catch (error) {
+      if (error.status === 404) {
+        return res.json({ success: true, data: { stocks: [] } });
+      }
+      throw error;
     }
-    
-    // Format the stock data
-    const stock = {
-      symbol: quote.symbol,
-      name: quote.longName || quote.shortName || symbol,
-      interval: interval,
-      currentPrice: quote.regularMarketPrice,
-      previousClose: quote.regularMarketPreviousClose,
-      marketCap: quote.marketCap || 0,
-      peRatio: quote.trailingPE || 0,
-      dividendYield: quote.dividendYield || 0,
-      fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh || 0,
-      fiftyTwoWeekLow: quote.fiftyTwoWeekLow || 0,
-      volume: quote.regularMarketVolume || 0,
-      averageVolume: quote.averageDailyVolume3Month || 0,
-      beta: beta,
-      change: quote.regularMarketPrice && quote.regularMarketPreviousClose 
-        ? quote.regularMarketPrice - quote.regularMarketPreviousClose 
-        : 0,
-      changePercent: quote.regularMarketPrice && quote.regularMarketPreviousClose 
-        ? ((quote.regularMarketPrice - quote.regularMarketPreviousClose) / quote.regularMarketPreviousClose) * 100 
-        : 0,
-      sector: quote.sector || 'Unknown'
-    };
-    
-    // Save to database for future use
-    const newStock = new Stock(stock);
-    await newStock.save();
-    logger.info(`Saved new stock to database: ${stock.symbol}`);
+    await saveQuote(quote, interval);
     
     res.json({
       success: true,
       data: {
-        stocks: [stock]
+        stocks: [{ ...quote, interval, sector: 'Unknown' }]
       }
     });
   } catch (error) {
     logger.error('Error in stock search:', error);
-    res.status(500).json({ 
+    res.status(502).json({ 
       success: false, 
-      message: 'Failed to search stocks. Please check the symbol and try again.' 
+      message: 'Failed to search stocks. Please try again later.' 
     });
   }
 });
 
-// @desc    Get stock details by symbol with improved error handling
+// @desc    Get live stock details by symbol
 // @route   GET /api/v1/stocks/:symbol
 // @access  Public
 router.get('/:symbol', async (req, res) => {
   try {
     const { symbol } = req.params;
     const { interval = '1d' } = req.query;
-    
-    if (!symbol) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Stock symbol is required' 
-      });
-    }
 
-    // Try to find in our database first
-    let stock = await Stock.findOne({ 
-      $or: [
-        { symbol: symbol.toUpperCase() },
-        { symbol: symbol.toUpperCase() + '.NS' },
-        { symbol: symbol.toUpperCase() + '.BSE' }
-      ]
-    });
-
-    if (!stock) {
-      // If not found in database, fetch from Yahoo Finance
-      let stockSymbol = symbol.toUpperCase();
-      
-      // Add .NS suffix for Indian stocks if not present
-      const indianStocks = ['SBIN', 'RELIANCE', 'TCS', 'INFY', 'HDFC', 'ICICIBANK', 'HINDUNILVR', 'ITC', 'KOTAKBANK', 'L&T'];
-      if (indianStocks.includes(stockSymbol) && !stockSymbol.endsWith('.NS') && !stockSymbol.endsWith('.BSE')) {
-        stockSymbol += '.NS';
-      }
-
-      logger.info(`Fetching from Yahoo Finance: ${stockSymbol}`);
-      
-      // Add retry logic
-      let quote = null;
-      let retryCount = 0;
-      const maxRetries = 3;
-      
-      while (retryCount < maxRetries) {
-        try {
-          quote = await (await getYahooFinance()).quote(stockSymbol);
-          break;
-        } catch (retryError) {
-          retryCount++;
-          logger.warn(`Retry ${retryCount}/${maxRetries} for ${stockSymbol}:`, retryError.message);
-          
-          if (retryCount >= maxRetries) {
-            throw retryError;
-          }
-          
-          // Wait before retry (exponential backoff)
-          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
-        }
-      }
-      
-      if (!quote) {
-        throw new Error('Failed to fetch stock data after retries');
-      }
-
-      // Fetch beta from quoteSummary (not available in quote())
-      let beta = 0;
-      try {
-        const summary = await (await getYahooFinance()).quoteSummary(symbol, { modules: ['defaultKeyStatistics'] });
-        beta = summary?.defaultKeyStatistics?.beta || 0;
-      } catch (betaErr) {
-        logger.warn(`Could not fetch beta for ${symbol}:`, betaErr.message);
-      }
-      
-      // Format the stock data
-      const stockData = {
-        symbol: quote.symbol,
-        name: quote.longName || quote.shortName || symbol,
-        interval: interval,
-        currentPrice: quote.regularMarketPrice,
-        previousClose: quote.regularMarketPreviousClose,
-        marketCap: quote.marketCap,
-        peRatio: quote.trailingPE,
-        dividendYield: quote.dividendYield,
-        fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh,
-        fiftyTwoWeekLow: quote.fiftyTwoWeekLow,
-        volume: quote.regularMarketVolume,
-        averageVolume: quote.averageDailyVolume3Month,
-        beta: beta,
-        change: quote.regularMarketPrice && quote.regularMarketPreviousClose 
-          ? quote.regularMarketPrice - quote.regularMarketPreviousClose 
-          : 0,
-        changePercent: quote.regularMarketPrice && quote.regularMarketPreviousClose 
-          ? ((quote.regularMarketPrice - quote.regularMarketPreviousClose) / quote.regularMarketPreviousClose) * 100 
-          : 0,
-        sector: quote.sector || 'Unknown'
-      };
-      
-      // Save to database
-      stock = new Stock(stockData);
-      await stock.save();
-      logger.info(`Saved new stock to database: ${stockData.symbol}`);
-    } else {
-      // Update interval if provided and different
-      if (stock.interval !== interval) {
-        stock.interval = interval;
-        await stock.save();
-      }
-    }
+    // Always quote live; the saved document is refreshed, never served in place of a quote
+    const quote = await marketData.getQuote(toYahooSymbol(symbol));
+    const saved = await saveQuote(quote, interval);
     
     res.json({
       success: true,
       data: {
-        stock
+        stock: { ...(saved ? saved.toObject() : {}), ...quote, interval }
       }
     });
   } catch (error) {
     logger.error('Error fetching stock details:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to fetch stock details. Please check the symbol and try again.' 
-    });
+    sendMarketDataError(res, error, 'Failed to fetch stock details. Please try again later.');
   }
 });
 
-// @desc    Get real-time price for a stock with improved error handling
+// @desc    Get real-time price for a stock
 // @route   GET /api/v1/stocks/:symbol/price
 // @access  Public
 router.get('/:symbol/price', async (req, res) => {
   try {
-    const { symbol } = req.params;
-    
-    if (!symbol) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Stock symbol is required' 
-      });
-    }
-
-    // Add .NS suffix for Indian stocks if not present
-    let stockSymbol = symbol.toUpperCase();
-    const indianStocks = ['SBIN', 'RELIANCE', 'TCS', 'INFY', 'HDFC', 'ICICIBANK', 'HINDUNILVR', 'ITC', 'KOTAKBANK', 'L&T'];
-    if (indianStocks.includes(stockSymbol) && !stockSymbol.endsWith('.NS') && !stockSymbol.endsWith('.BSE')) {
-      stockSymbol += '.NS';
-    }
-
-    logger.info(`Fetching price from Yahoo Finance: ${stockSymbol}`);
-    
-    // Add retry logic
-    let quote = null;
-    let retryCount = 0;
-    const maxRetries = 3;
-    
-    while (retryCount < maxRetries) {
-      try {
-        quote = await (await getYahooFinance()).quote(stockSymbol);
-        break;
-      } catch (retryError) {
-        retryCount++;
-        logger.warn(`Retry ${retryCount}/${maxRetries} for ${stockSymbol}:`, retryError.message);
-        
-        if (retryCount >= maxRetries) {
-          throw retryError;
-        }
-        
-        // Wait before retry (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
-      }
-    }
-    
-    if (!quote) {
-      throw new Error('Failed to fetch stock price after retries');
-    }
-    
-    // Check if the data is stale (older than 5 minutes)
-    const now = new Date();
-    const quoteTime = new Date(quote.regularMarketTime * 1000);
-    const isStale = (now - quoteTime) > 5 * 60 * 1000;
+    const quote = await marketData.getQuote(toYahooSymbol(req.params.symbol));
     
     res.json({
       success: true,
       data: {
         symbol: quote.symbol,
-        currentPrice: quote.regularMarketPrice,
-        isStale
+        currentPrice: quote.currentPrice,
+        // Stale if the last trade is older than 5 minutes
+        isStale: Date.now() - Date.parse(quote.lastUpdated) > 5 * 60 * 1000
       }
     });
   } catch (error) {
     logger.error('Error fetching stock price:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to fetch stock price. Please check the symbol and try again.' 
-    });
+    sendMarketDataError(res, error, 'Failed to fetch stock price. Please try again later.');
   }
 });
 
@@ -555,73 +379,24 @@ function generateMockHistoricalData(timeframe) {
   return data;
 }
 
-// @desc    Get real-time stock data with improved error handling
+// @desc    Get real-time stock data
 // @route   GET /api/v1/stocks/:symbol/real-time
 // @access  Public
 router.get('/:symbol/real-time', async (req, res) => {
   try {
-    const { symbol } = req.params;
-    
-    logger.info(`Fetching real-time data for ${symbol}`);
-    
-    // Add .NS suffix for Indian stocks if not present
-    let stockSymbol = symbol.toUpperCase();
-    const indianStocks = ['SBIN', 'RELIANCE', 'TCS', 'INFY', 'HDFC', 'ICICIBANK', 'HINDUNILVR', 'ITC', 'KOTAKBANK', 'L&T'];
-    if (indianStocks.includes(stockSymbol) && !stockSymbol.endsWith('.NS') && !stockSymbol.endsWith('.BSE')) {
-      stockSymbol += '.NS';
-    }
-    
-    // Add retry logic
-    let quote = null;
-    let retryCount = 0;
-    const maxRetries = 3;
-    
-    while (retryCount < maxRetries) {
-      try {
-        quote = await (await getYahooFinance()).quote(stockSymbol);
-        break;
-      } catch (retryError) {
-        retryCount++;
-        logger.warn(`Retry ${retryCount}/${maxRetries} for ${stockSymbol}:`, retryError.message);
-        
-        if (retryCount >= maxRetries) {
-          throw retryError;
-        }
-        
-        // Wait before retry (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
-      }
-    }
-    
-    if (!quote) {
-      throw new Error('Failed to fetch real-time data after retries');
-    }
-    
-    const realTimeData = {
-      symbol: quote.symbol,
-      name: quote.longName || quote.shortName || symbol,
-      currentPrice: quote.regularMarketPrice,
-      previousClose: quote.regularMarketPreviousClose,
-      change: quote.regularMarketPrice - quote.regularMarketPreviousClose,
-      changePercent: ((quote.regularMarketPrice - quote.regularMarketPreviousClose) / quote.regularMarketPreviousClose) * 100,
-      marketCap: quote.marketCap,
-      volume: quote.regularMarketVolume,
-      lastUpdated: new Date(quote.regularMarketTime * 1000).toISOString(),
-      isStale: (Date.now() - quote.regularMarketTime * 1000) > 60000
-    };
-    
-    logger.info(`Real-time data fetched for ${symbol}: ${realTimeData.currentPrice}`);
+    const quote = await marketData.getQuote(toYahooSymbol(req.params.symbol));
     
     res.json({
       success: true,
-      data: realTimeData
+      data: {
+        ...quote,
+        timestamp: quote.lastUpdated,
+        isStale: Date.now() - Date.parse(quote.lastUpdated) > 60 * 1000
+      }
     });
   } catch (error) {
     logger.error('Get real-time data error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch real-time data. Please check the symbol and try again.'
-    });
+    sendMarketDataError(res, error, 'Failed to fetch real-time data. Please try again later.');
   }
 });
 

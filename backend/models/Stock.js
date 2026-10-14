@@ -67,7 +67,6 @@ const stockSchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance
-stockSchema.index({ symbol: 1 });
 stockSchema.index({ sector: 1 });
 stockSchema.index({ marketCap: -1 });
 stockSchema.index({ changePercent: -1 });

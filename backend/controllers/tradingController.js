@@ -195,14 +195,12 @@ exports.placeOrder = async (req, res) => {
             logger.info('Created new stock with sector:', sector, stockData);
           } catch (createError) {
             logger.error('Error creating stock:', createError);
-            stockData = new Stock({
-              symbol: symbol.toUpperCase(),
-              name: symbol.toUpperCase(),
-              currentPrice: 100,
-              sector: 'Unknown'
+            return res.status(createError.status === 404 ? 404 : 502).json({
+              success: false,
+              message: createError.status === 404
+                ? `Stock ${symbol.toUpperCase()} not found`
+                : 'Live price unavailable right now. Please try again shortly.',
             });
-            await stockData.save();
-            logger.info('Created fallback stock with Unknown sector:', stockData);
           }
         } else {
           logger.info('Stock found by symbol:', stockData);
