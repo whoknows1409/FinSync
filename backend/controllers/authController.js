@@ -561,3 +561,229 @@ exports.resendVerification = async (req, res) => {
     });
   }
 };
+
+// ---------------------------------------------------------------------------
+// Passwords and account lifecycle
+// ---------------------------------------------------------------------------
+
+const MIN_PASSWORD_LENGTH = 8;
+const RESET_TOKEN_LIFETIME_MS = 60 * 60 * 1000; // 1 hour, as the email says
+
+// Only a hash of the reset token is stored, so a database leak cannot be used
+// to reset anyone's password.
+const hashToken = token => crypto.createHash('sha256').update(String(token)).digest('hex');
+
+// Rejects every login token issued before now. JWT issue times are whole
+// seconds, so round down: the token handed out in this same response stays valid.
+const invalidateExistingTokens = user => {
+  user.tokensValidAfter = new Date(Math.floor(Date.now() / 1000) * 1000);
+};
+
+// @desc    Email a password reset link
+// @route   POST /api/auth/forgot-password
+// @access  Public
+exports.forgotPassword = async (req, res) => {
+  // The same answer whether or not the address has an account, so this cannot
+  // be used to find out who is registered.
+  const genericResponse = {
+    success: true,
+    message: 'If an account exists for that email address, we have sent a link to reset the password.'
+  };
+
+  try {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Please enter your email address' });
+    }
+
+    if (!emailService.isConfigured) {
+      return res.status(503).json({
+        success: false,
+        message: 'Password reset is unavailable right now. Please try again later.'
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    // Google accounts have no password to reset
+    if (!user || user.authProvider === 'google') {
+      return res.json(genericResponse);
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    user.passwordResetToken = hashToken(resetToken);
+    user.passwordResetExpires = new Date(Date.now() + RESET_TOKEN_LIFETIME_MS);
+    await user.save();
+
+    try {
+      await emailService.sendPasswordResetEmail(user.email, resetToken, user.name);
+    } catch (emailError) {
+      console.error('Failed to send password reset email:', emailError.message);
+      user.passwordResetToken = undefined;
+      user.passwordResetExpires = undefined;
+      await user.save();
+      return res.status(500).json({
+        success: false,
+        message: 'We could not send the reset email. Please try again.'
+      });
+    }
+
+    res.json(genericResponse);
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// @desc    Set a new password using the emailed link
+// @route   POST /api/auth/reset-password
+// @access  Public
+exports.resetPassword = async (req, res) => {
+  try {
+    const { token, password } = req.body || {};
+
+    if (!token || typeof password !== 'string') {
+      return res.status(400).json({ success: false, message: 'Reset link and new password are required' });
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({
+        success: false,
+        message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters long`
+      });
+    }
+
+    const user = await User.findOne({
+      passwordResetToken: hashToken(token),
+      passwordResetExpires: { $gt: new Date() }
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'This reset link is invalid or has expired. Please request a new one.'
+      });
+    }
+
+    user.password = password;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    // Opening the emailed link proves the address belongs to them
+    user.isEmailVerified = true;
+    invalidateExistingTokens(user);
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Your password has been changed. You can now sign in with it.'
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// @desc    Change password while signed in
+// @route   POST /api/auth/change-password
+// @access  Private
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    if (user.authProvider === 'google') {
+      return res.status(400).json({
+        success: false,
+        message: 'This account signs in with Google, so it has no password to change.'
+      });
+    }
+    if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({
+        success: false,
+        message: `New password must be at least ${MIN_PASSWORD_LENGTH} characters long`
+      });
+    }
+    if (!(await user.comparePassword(String(currentPassword || '')))) {
+      return res.status(400).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    user.password = newPassword;
+    invalidateExistingTokens(user);
+    await user.save();
+
+    // Other devices are signed out; this one continues with a fresh token
+    res.json({
+      success: true,
+      message: 'Password changed. Other devices have been signed out.',
+      token: generateToken(user._id)
+    });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// @desc    Sign out of every device
+// @route   POST /api/auth/logout-all
+// @access  Private
+exports.logoutAll = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Move the cut-off one second ahead so the token used for this request is rejected too
+    user.tokensValidAfter = new Date((Math.floor(Date.now() / 1000) + 1) * 1000);
+    await user.save();
+
+    res.json({ success: true, message: 'You have been signed out everywhere.' });
+  } catch (error) {
+    console.error('Logout all error:', error);
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// @desc    Permanently delete the account and everything stored for it
+// @route   DELETE /api/auth/account
+// @access  Private
+exports.deleteAccount = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Confirm it is really them: the password, or for Google accounts the word DELETE
+    if (user.authProvider === 'google') {
+      if (req.body?.confirm !== 'DELETE') {
+        return res.status(400).json({ success: false, message: 'Type DELETE to confirm' });
+      }
+    } else if (!(await user.comparePassword(String(req.body?.password || '')))) {
+      return res.status(400).json({ success: false, message: 'Password is incorrect' });
+    }
+
+    const userId = user._id;
+    await Promise.all([
+      require('../models/Transaction').deleteMany({ user: userId }),
+      require('../models/RecurringTransaction').deleteMany({ user: userId }),
+      require('../models/Budget').deleteMany({ user: userId }),
+      require('../models/FinancialGoal').deleteMany({ user: userId }),
+      require('../models/Goal').deleteMany({ user: userId }),
+      require('../models/Activity').deleteMany({ user: userId }),
+      require('../models/ChatHistory').deleteMany({ user: userId }),
+      require('../models/Notification').deleteMany({ user: userId }),
+      require('../models/TradingAccount').deleteMany({ user: userId }),
+      require('../models/DashboardLayout').deleteMany({ userId }),
+    ]);
+    await User.deleteOne({ _id: userId });
+
+    console.log('🗑️ Account deleted:', String(userId));
+    res.json({ success: true, message: 'Your account and all of its data have been deleted.' });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({ success: false, message: 'Something went wrong. Your account was not deleted.' });
+  }
+};

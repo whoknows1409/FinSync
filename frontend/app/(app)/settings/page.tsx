@@ -13,6 +13,7 @@ import { useTheme } from "next-themes"
 import { User, Bell, Shield, Palette, Database, Upload } from "lucide-react"
 import { toast } from "sonner"
 import { profileAPI } from "@/lib/api-service"
+import { SecurityCard, DeleteAccountButton } from "@/components/settings/account-security"
 
 export default function SettingsPage() {
   const { user, updateUser } = useAuth()
@@ -24,11 +25,14 @@ export default function SettingsPage() {
     stockAlerts: true,
   })
 
+  const [isGoogleAccount, setIsGoogleAccount] = useState(false)
+
   // Notification preferences are stored on the account, so they apply on every device
   useEffect(() => {
     let cancelled = false
     profileAPI.getProfile()
       .then((response: any) => {
+        if (!cancelled) setIsGoogleAccount(response?.data?.authProvider === 'google')
         const saved = response?.data?.notificationPreferences
         if (!cancelled && saved) {
           setNotifications({
@@ -222,6 +226,9 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Security */}
+        <SecurityCard isGoogleAccount={isGoogleAccount} />
+
         {/* Data Management */}
         <Card>
           <CardHeader>
@@ -245,7 +252,7 @@ export default function SettingsPage() {
                 <Label>Delete Account</Label>
                 <p className="text-sm text-muted-foreground">Permanently delete your account and data</p>
               </div>
-              <Button variant="destructive">Delete</Button>
+              <DeleteAccountButton isGoogleAccount={isGoogleAccount} />
             </div>
           </CardContent>
         </Card>

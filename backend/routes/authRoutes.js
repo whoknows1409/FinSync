@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
-const { authLimiter, accountLimiter } = require('../middleware/rateLimiter');
+const { authLimiter, accountLimiter, emailRequestLimiter } = require('../middleware/rateLimiter');
 
 // Health check endpoint — protected, only accessible to authenticated users
 router.get('/health/email', protect, async (req, res) => {
@@ -35,5 +35,12 @@ router.get('/me', protect, authController.getCurrentUser);
 // Email verification routes
 router.get('/verify-email/:token', authController.verifyEmail);
 router.post('/resend-verification', authLimiter, accountLimiter, authController.resendVerification);
+
+// Passwords and account lifecycle
+router.post('/forgot-password', authLimiter, emailRequestLimiter, authController.forgotPassword);
+router.post('/reset-password', authLimiter, authController.resetPassword);
+router.post('/change-password', protect, authLimiter, authController.changePassword);
+router.post('/logout-all', protect, authController.logoutAll);
+router.delete('/account', protect, authLimiter, authController.deleteAccount);
 
 module.exports = router;

@@ -36,6 +36,23 @@ const accountLimiter = rateLimit({
   skipSuccessfulRequests: true,
 });
 
+// Emails sent on request (password reset): 3 per hour for a given address,
+// counting every request, so nobody can flood an inbox or the email quota.
+const emailRequestLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  keyGenerator: (req) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    return email ? `email:${email}` : ipKeyGenerator(req.ip);
+  },
+  message: {
+    success: false,
+    message: 'Too many requests for this email address. Please try again in an hour.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // AI endpoints call a paid, quota-limited API. Each signed-in user gets their
 // own allowance. Use after `protect`.
 const aiLimiter = rateLimit({
@@ -60,4 +77,4 @@ const apiLimiter = rateLimit({
   }
 });
 
-module.exports = { authLimiter, accountLimiter, aiLimiter, apiLimiter };
+module.exports = { authLimiter, accountLimiter, emailRequestLimiter, aiLimiter, apiLimiter };
