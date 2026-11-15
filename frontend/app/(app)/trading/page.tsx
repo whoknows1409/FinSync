@@ -26,6 +26,7 @@ interface Holding {
   averagePrice: number
   currentPrice: number
   marketValue: number
+  unrealizedPnL: number
   pnlPercentage: number
   sector: string
 }
