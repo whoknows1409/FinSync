@@ -256,7 +256,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       setUser(userToStore)
       localStorage.setItem("finsync-user", JSON.stringify(userToStore))
-      toast.success('Profile updated successfully!')
+      // The server's message says when a new email address is waiting to be confirmed
+      toast.success(data.message || 'Profile updated successfully!')
     } catch (error) {
       console.error('💥 Update user error:', error)
       const errorMessage = error instanceof Error ? error.message : "Failed to update profile"

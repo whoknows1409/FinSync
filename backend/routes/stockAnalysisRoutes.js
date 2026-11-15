@@ -5,6 +5,7 @@ const logger = require('../utils/logger');
 const geminiService = require('../services/geminiService'); // This is correct
 const marketData = require('../services/marketDataService');
 const { protect } = require('../middleware/auth');
+const { aiLimiter } = require('../middleware/rateLimiter');
 
 function sendMarketDataError(res, error) {
   if (error.status === 404) {
@@ -42,7 +43,8 @@ router.get('/historical-data', async (req, res) => {
 });
 
 // Route to compare two stocks
-router.get('/compare', async (req, res) => {
+// Signed-in users only: this calls the AI model
+router.get('/compare', protect, aiLimiter, async (req, res) => {
   try {
     const { symbol1, symbol2 } = req.query;
     
@@ -101,7 +103,7 @@ Please analyze the detailed metrics below to make an informed investment decisio
 });
 
 // Route to generate stock analysis using Gemini AI
-router.post('/stock-analysis', async (req, res) => {
+router.post('/stock-analysis', protect, aiLimiter, async (req, res) => {
   try {
     const { stock } = req.body;
     
@@ -163,7 +165,7 @@ router.post('/stock-analysis', async (req, res) => {
 });
 
 // Route to get personal stock suggestions based on user's financial data
-router.post('/personal-suggestions', protect, async (req, res) => {
+router.post('/personal-suggestions', protect, aiLimiter, async (req, res) => {
   try {
     const { stock } = req.body;
     // Always the caller's own data; never trust a user ID from the request body

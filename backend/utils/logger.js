@@ -121,11 +121,24 @@ if (winston) {
       ]
     });
 
-    // Add console transport for development
+    // Console output. In development everything is shown. In production the
+    // log files live on a disk that is wiped on every deploy, so warnings and
+    // errors also go to the console, where the hosting platform keeps them.
     if (process.env.NODE_ENV !== 'production') {
       logger.add(
         new winston.transports.Console({
           format: consoleFormat,
+        })
+      );
+    } else {
+      logger.add(
+        new winston.transports.Console({
+          level: process.env.LOG_CONSOLE_LEVEL || 'warn',
+          format: winston.format.combine(
+            winston.format.timestamp(),
+            winston.format.errors({ stack: true }),
+            winston.format.json()
+          ),
         })
       );
     }

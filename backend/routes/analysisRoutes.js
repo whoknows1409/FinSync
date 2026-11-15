@@ -5,6 +5,7 @@ const Budget = require('../models/Budget');
 const FinancialGoal = require('../models/FinancialGoal');
 const TradingAccount = require('../models/TradingAccount');
 const { protect } = require('../middleware/auth');
+const { aiLimiter } = require('../middleware/rateLimiter');
 const {
   validatePagination,
   validateDateRange,
@@ -18,7 +19,7 @@ router.use(protect);
 // @desc    Get AI-powered financial insights
 // @route   GET /api/v1/analysis/ai-insights
 // @access  Private
-router.get('/ai-insights', validateDateRange, handleValidationErrors, async (req, res) => {
+router.get('/ai-insights', aiLimiter, validateDateRange, handleValidationErrors, async (req, res) => {
   try {
     const startDate = req.query.startDate ? new Date(req.query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endDate = req.query.endDate ? new Date(req.query.endDate) : new Date();
@@ -133,7 +134,7 @@ router.get('/ai-insights', validateDateRange, handleValidationErrors, async (req
 // @desc    Detect recurring expenses
 // @route   GET /api/v1/analysis/detect-recurring
 // @access  Private
-router.get('/detect-recurring', validateDateRange, handleValidationErrors, async (req, res) => {
+router.get('/detect-recurring', aiLimiter, validateDateRange, handleValidationErrors, async (req, res) => {
   try {
     const startDate = req.query.startDate ? new Date(req.query.startDate) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000); // 90 days
     const endDate = req.query.endDate ? new Date(req.query.endDate) : new Date();
@@ -175,7 +176,7 @@ router.get('/detect-recurring', validateDateRange, handleValidationErrors, async
 // @desc    Get biggest expenses
 // @route   GET /api/v1/analysis/biggest-expenses
 // @access  Private
-router.get('/biggest-expenses', validateDateRange, handleValidationErrors, async (req, res) => {
+router.get('/biggest-expenses', aiLimiter, validateDateRange, handleValidationErrors, async (req, res) => {
   try {
     const startDate = req.query.startDate ? new Date(req.query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endDate = req.query.endDate ? new Date(req.query.endDate) : new Date();

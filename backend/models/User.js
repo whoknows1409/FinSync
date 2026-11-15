@@ -43,6 +43,24 @@ const userSchema = new mongoose.Schema({
   emailVerificationExpires: {
     type: Date
   },
+  // A new address the user asked to switch to. It replaces `email` only after
+  // the link sent to it has been opened.
+  pendingEmail: {
+    type: String,
+    lowercase: true,
+    trim: true
+  },
+  passwordResetToken: {
+    type: String
+  },
+  passwordResetExpires: {
+    type: Date
+  },
+  // Login tokens issued before this moment are rejected. Set when the password
+  // changes or the user signs out everywhere.
+  tokensValidAfter: {
+    type: Date
+  },
   lastLogin: {
     type: Date
   },
@@ -107,5 +125,19 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
     return false;
   }
 };
+
+// Never send secrets to a client, whichever route serialises the user
+userSchema.set('toJSON', {
+  transform: (doc, ret) => {
+    delete ret.password;
+    delete ret.emailVerificationToken;
+    delete ret.emailVerificationExpires;
+    delete ret.passwordResetToken;
+    delete ret.passwordResetExpires;
+    delete ret.tokensValidAfter;
+    delete ret.__v;
+    return ret;
+  }
+});
 
 module.exports = mongoose.model('User', userSchema);

@@ -4,7 +4,12 @@ const Goal = require('../models/Goal');
 const Budget = require('../models/Budget');
 const TradingAccount = require('../models/TradingAccount');
 const Activity = require('../models/Activity');
+const emailService = require('../utils/emailService');
+const crypto = require('crypto');
 const fs = require('fs');
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const stripTags = value => String(value).replace(/<[^>]*>/g, '').trim();
 
 // @desc    Get user profile
 // @route   GET /api/profile
@@ -30,12 +35,13 @@ exports.getProfile = async (req, res) => {
 // @desc    Update user profile
 // @route   PUT /api/profile
 // @access  Private
-// @desc    Update user profile
-// @route   PUT /api/profile
-// @access  Private
+//
+// Users can change their name, phone, bio and notification preferences here.
+// Membership level cannot be set by the user, and a new email address only
+// takes effect after the confirmation link sent to it has been opened.
 exports.updateProfile = async (req, res) => {
   try {
-    const { name, email, phone, bio, membershipType } = req.body;
+    const { name, email, phone, bio, notificationPreferences } = req.body || {};
     
     // Find user
     const user = await User.findById(req.user.id);
@@ -45,11 +51,52 @@ exports.updateProfile = async (req, res) => {
     }
     
     // Update fields
-    if (name) user.name = name;
-    if (email) user.email = email;
-    if (phone) user.phone = phone;
-    if (bio) user.bio = bio;
-    if (membershipType) user.membershipType = membershipType;
+    if (name !== undefined) {
+      const cleanName = stripTags(name);
+      if (!cleanName) {
+        return res.status(400).json({ success: false, message: 'Please provide a valid name' });
+      }
+      user.name = cleanName;
+    }
+    if (phone !== undefined) user.phone = stripTags(phone);
+    if (bio !== undefined) user.bio = stripTags(bio);
+
+    if (notificationPreferences && typeof notificationPreferences === 'object') {
+      for (const key of ['budgetAlerts', 'stockAlerts']) {
+        if (typeof notificationPreferences[key] === 'boolean') {
+          user.notificationPreferences[key] = notificationPreferences[key];
+        }
+      }
+    }
+
+    // A different email address is held as pending until it is confirmed
+    let pendingEmail = null;
+    const requestedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    if (requestedEmail && requestedEmail !== user.email) {
+      if (user.authProvider === 'google') {
+        return res.status(400).json({
+          success: false,
+          message: 'This account signs in with Google, so its email address cannot be changed here.'
+        });
+      }
+      if (!EMAIL_PATTERN.test(requestedEmail)) {
+        return res.status(400).json({ success: false, message: 'Please provide a valid email address' });
+      }
+      if (await User.exists({ email: requestedEmail })) {
+        return res.status(400).json({ success: false, message: 'That email address is already in use' });
+      }
+      if (!emailService.isConfigured) {
+        return res.status(503).json({
+          success: false,
+          message: 'Email changes are unavailable right now. Please try again later.'
+        });
+      }
+
+      pendingEmail = requestedEmail;
+      user.pendingEmail = requestedEmail;
+      user.emailVerificationToken = crypto.randomBytes(32).toString('hex');
+      user.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    }
     
     // Handle profile image if uploaded
     if (req.file) {
@@ -89,6 +136,22 @@ exports.updateProfile = async (req, res) => {
     
     // Save updated user
     const updatedUser = await user.save();
+
+    if (pendingEmail) {
+      try {
+        await emailService.sendVerificationEmail(pendingEmail, user.emailVerificationToken, user.name);
+      } catch (emailError) {
+        console.error('Could not send email change confirmation:', emailError.message);
+        user.pendingEmail = undefined;
+        user.emailVerificationToken = undefined;
+        user.emailVerificationExpires = undefined;
+        await user.save();
+        return res.status(500).json({
+          success: false,
+          message: 'We could not send the confirmation email, so your email address was not changed. Your other changes were saved.'
+        });
+      }
+    }
     
     // Log activity
     try {
@@ -102,9 +165,14 @@ exports.updateProfile = async (req, res) => {
       // Don't fail the whole operation if activity logging fails
     }
     
+    // The user's toJSON removes the password hash and tokens
     res.json({
       success: true,
-      data: updatedUser
+      data: updatedUser,
+      emailChangePending: !!pendingEmail,
+      message: pendingEmail
+        ? `Profile updated. We sent a confirmation link to ${pendingEmail}; your email address will change once you open it.`
+        : 'Profile updated successfully!'
     });
   } catch (error) {
     console.error('Update profile error:', error);

@@ -20,6 +20,29 @@ const generateRefreshToken = (id) => {
   });
 };
 
+// Throws unless Google says this access token was issued to our OAuth client
+async function assertTokenIssuedToThisApp(accessToken) {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    // Without the client ID there is nothing to compare against. Sign-in keeps
+    // working as before; set GOOGLE_CLIENT_ID on the backend to enable the check.
+    console.warn('⚠️ GOOGLE_CLIENT_ID is not set: Google access tokens are not being checked against this app.');
+    return;
+  }
+
+  const response = await fetch(
+    `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`
+  );
+  if (!response.ok) {
+    throw new Error(`Google tokeninfo API returned ${response.status}`);
+  }
+
+  const info = await response.json();
+  if (info.aud !== clientId && info.azp !== clientId) {
+    throw new Error('Google access token was issued to a different application');
+  }
+}
+
 // @desc    Register a new user
 // @route   POST /api/auth/register
 // @access  Public
@@ -221,7 +244,7 @@ exports.login = async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error during login' });
+    res.status(500).json({ success: false, message: 'Server error during login' });
   }
 };
 
@@ -266,6 +289,11 @@ exports.googleAuth = async (req, res) => {
       // OAuth2 popup flow: verify access token by calling Google's userinfo API server-side
       const accessToken = credential.slice('access_token:'.length);
       try {
+        // An access token only proves who the Google user is, not which app it
+        // was issued to. Without this check a token the user granted to any
+        // other website could be used to sign in here as them.
+        await assertTokenIssuedToThisApp(accessToken);
+
         const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: { Authorization: `Bearer ${accessToken}` }
         });
@@ -418,18 +446,38 @@ exports.verifyEmail = async (req, res) => {
       });
     }
 
+    // The link was either for a new account or for a change of email address
+    const isEmailChange = !!user.pendingEmail;
+    if (isEmailChange) {
+      const taken = await User.exists({ email: user.pendingEmail, _id: { $ne: user._id } });
+      if (taken) {
+        user.pendingEmail = undefined;
+        user.emailVerificationToken = undefined;
+        user.emailVerificationExpires = undefined;
+        await user.save();
+        return res.status(400).json({
+          success: false,
+          message: 'That email address is now used by another account.'
+        });
+      }
+      user.email = user.pendingEmail;
+      user.pendingEmail = undefined;
+    }
+
     // Mark email as verified
     user.isEmailVerified = true;
     user.emailVerificationToken = undefined;
     user.emailVerificationExpires = undefined;
     await user.save();
 
-    // Send welcome email
-    try {
-      await emailService.sendWelcomeEmail(user.email, user.name);
-    } catch (emailError) {
-      console.error('Failed to send welcome email:', emailError);
-      // Don't fail verification if welcome email fails
+    // Send welcome email to new accounts
+    if (!isEmailChange) {
+      try {
+        await emailService.sendWelcomeEmail(user.email, user.name);
+      } catch (emailError) {
+        console.error('Failed to send welcome email:', emailError);
+        // Don't fail verification if welcome email fails
+      }
     }
 
     // Generate token for auto-login
@@ -438,7 +486,9 @@ exports.verifyEmail = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Email verified successfully! You can now log in.',
+      message: isEmailChange
+        ? 'Your email address has been updated.'
+        : 'Email verified successfully! You can now log in.',
       token: authToken,
       refreshToken,
       user: {

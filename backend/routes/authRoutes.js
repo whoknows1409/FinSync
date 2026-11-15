@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
-const { authLimiter } = require('../middleware/rateLimiter');
+const { authLimiter, accountLimiter } = require('../middleware/rateLimiter');
 
 // Health check endpoint — protected, only accessible to authenticated users
 router.get('/health/email', protect, async (req, res) => {
@@ -28,12 +28,12 @@ router.get('/health/email', protect, async (req, res) => {
 
 // Auth routes with rate limiting
 router.post('/register', authLimiter, authController.register);
-router.post('/login', authLimiter, authController.login);
+router.post('/login', authLimiter, accountLimiter, authController.login);
 router.post('/google', authLimiter, authController.googleAuth);
 router.get('/me', protect, authController.getCurrentUser);
 
 // Email verification routes
 router.get('/verify-email/:token', authController.verifyEmail);
-router.post('/resend-verification', authLimiter, authController.resendVerification);
+router.post('/resend-verification', authLimiter, accountLimiter, authController.resendVerification);
 
 module.exports = router;

@@ -16,6 +16,7 @@ const {
   clearChatHistory,
 } = require('../controllers/chatbotController');
 const { protect } = require('../middleware/auth');
+const { aiLimiter } = require('../middleware/rateLimiter');
 const {
   validateChatbot,
   handleValidationErrors,
@@ -25,25 +26,25 @@ const {
 router.use(protect);
 
 // Chatbot query endpoint
-router.post('/query', validateChatbot.query, handleValidationErrors, sendMessage);
+router.post('/query', aiLimiter, validateChatbot.query, handleValidationErrors, sendMessage);
 
 // Financial insights
-router.post('/insights', getFinancialInsights);
+router.post('/insights', aiLimiter, getFinancialInsights);
 
 // Budget advice
-router.post('/budget-advice', getBudgetAdvice);
+router.post('/budget-advice', aiLimiter, getBudgetAdvice);
 
 // Investment advice
-router.post('/investment-advice', getInvestmentAdvice);
+router.post('/investment-advice', aiLimiter, getInvestmentAdvice);
 
 // Stock sentiment analysis
-router.post('/stock-sentiment', analyzeStockSentiment);
+router.post('/stock-sentiment', aiLimiter, analyzeStockSentiment);
 
 // Transaction categorization
-router.post('/categorize-transaction', categorizeTransaction);
+router.post('/categorize-transaction', aiLimiter, categorizeTransaction);
 
 // Stock price prediction
-router.post('/stock-prediction', predictStockPrice);
+router.post('/stock-prediction', aiLimiter, predictStockPrice);
 
 // Chat history endpoints
 router.post('/save-chat', saveChatHistory);

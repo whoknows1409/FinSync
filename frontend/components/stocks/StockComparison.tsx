@@ -53,8 +53,11 @@ export default function StockComparison() {
       const formattedSymbol1 = symbol1.trim().toUpperCase() + (symbol1.trim().toUpperCase().endsWith('.NS') ? '' : '.NS')
       const formattedSymbol2 = symbol2.trim().toUpperCase() + (symbol2.trim().toUpperCase().endsWith('.NS') ? '' : '.NS')
       
+      // The comparison includes an AI summary, which is for signed-in users only
+      const token = localStorage.getItem('token')
       const response = await fetch(
-        `/api/stocks-analysis/compare?symbol1=${formattedSymbol1}&symbol2=${formattedSymbol2}`
+        `/api/stocks-analysis/compare?symbol1=${encodeURIComponent(formattedSymbol1)}&symbol2=${encodeURIComponent(formattedSymbol2)}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
       )
       
       if (!response.ok) {

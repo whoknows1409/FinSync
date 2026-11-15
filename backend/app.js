@@ -49,15 +49,20 @@ app.use(cors({
 // Security middleware
 app.use(helmet());                  // Set security HTTP headers
 
-// Increase payload size limits
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// Request bodies are small JSON. Only profile updates, which can carry an
+// inline image, are allowed to be large.
+app.use('/api/v1/profile', express.json({ limit: '15mb' }));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ limit: '2mb', extended: true }));
 app.use(cookieParser());
 
 // Catch JSON parse errors and return generic message
 app.use((err, req, res, next) => {
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json({ success: false, message: 'Invalid JSON in request body' });
+  }
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ success: false, message: 'Request is too large' });
   }
   next(err);
 });

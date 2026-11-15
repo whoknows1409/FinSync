@@ -26,8 +26,9 @@ const protect = async (req, res, next) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       
-      // Find user by decoded ID
-      req.user = await User.findById(decoded.id).select('-password');
+      // Load only what request handlers use. The profile image is stored on
+      // the user and can be large, so it is not loaded on every request.
+      req.user = await User.findById(decoded.id).select('_id name email tokensValidAfter');
       
       if (!req.user) {
         return res.status(401).json({
@@ -35,10 +36,18 @@ const protect = async (req, res, next) => {
           message: 'User not found'
         });
       }
+
+      // Tokens issued before a password change or "sign out everywhere" no longer work
+      if (req.user.tokensValidAfter && decoded.iat * 1000 < req.user.tokensValidAfter.getTime()) {
+        return res.status(401).json({
+          success: false,
+          message: 'Session expired. Please log in again.'
+        });
+      }
       
       next();
     } catch (error) {
-      console.error('Token verification error:', error);
+      // An expired or malformed token is routine, not an application error
       return res.status(401).json({
         success: false,
         message: 'Token is not valid'

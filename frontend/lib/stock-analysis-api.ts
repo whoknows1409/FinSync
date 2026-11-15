@@ -65,10 +65,14 @@ export const getStockAnalysisData = async (symbol: string): Promise<StockAnalysi
 export const getStockAIAnalysis = async (stock: StockAnalysisData) => {
   try {
     
+    // AI analysis is for signed-in users only, so send the login token
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+
     const response = await fetch('/api/stocks-analysis/stock-analysis', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({ stock }),
     });

@@ -50,25 +50,22 @@ class GeminiAPI {
         ],
       };
 
-      logger.info('Making request to Gemini API', { requestData });
+      // Prompts contain users' financial details, so only sizes are logged.
+      // The key goes in a header so it never appears in a URL or an error log.
+      logger.info('Making request to Gemini API', { messages: messages.length });
 
-      const response = await axios.post(`${this.baseUrl}?key=${this.apiKey}`, requestData, {
+      const response = await axios.post(this.baseUrl, requestData, {
         headers: {
           'Content-Type': 'application/json',
+          'x-goog-api-key': this.apiKey,
         },
         timeout: 30000, // 30 seconds timeout
       });
 
-      logger.info('Received response from Gemini API', { 
-        status: response.status,
-        data: JSON.stringify(response.data).substring(0, 500) + '...' // Log first 500 chars of response
-      });
+      logger.info('Received response from Gemini API', { status: response.status });
 
       // More flexible response structure checking
       if (response.data) {
-        // Log the actual response structure for debugging
-        logger.debug('Gemini API response structure:', JSON.stringify(response.data, null, 2));
-        
         // Check if response has the expected structure
         if (response.data.candidates && 
             Array.isArray(response.data.candidates) && 
