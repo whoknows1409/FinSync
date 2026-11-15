@@ -14,14 +14,16 @@ export default function AppLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { user } = useAuth()
+  const { user, isLoading } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (!user) {
+    // Wait until the saved session has been checked. Redirecting before that
+    // sent every page refresh to the home page and on to the dashboard.
+    if (!isLoading && !user) {
       router.push("/")
     }
-  }, [user, router])
+  }, [user, isLoading, router])
 
   if (!user) {
     return null // Will redirect to home
