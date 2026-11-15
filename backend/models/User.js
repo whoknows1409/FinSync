@@ -64,6 +64,17 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['Basic', 'Premium'],
     default: 'Basic'
+  },
+  // Which in-app notifications the user wants (Settings > Notifications)
+  notificationPreferences: {
+    budgetAlerts: {
+      type: Boolean,
+      default: true
+    },
+    stockAlerts: {
+      type: Boolean,
+      default: true
+    }
   }
 }, {
   timestamps: true
