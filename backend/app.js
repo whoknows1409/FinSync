@@ -83,8 +83,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Settings routes are registered in server.js
-
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });
@@ -101,6 +99,41 @@ app.get('/api/health', (req, res) => {
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Global error handler is registered in server.js after all routes
+// Routes
+app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/v1/transactions', require('./routes/transactionRoutes'));
+app.use('/api/export', require('./routes/exportRoutes'));
+app.use('/api/v1/stocks', require('./routes/stockRoutes'));
+app.use('/api/stocks-analysis', require('./routes/stockAnalysisRoutes'));
+app.use('/api/v1/profile', require('./routes/profileRoutes'));
+app.use('/api/analysis', require('./routes/analysisRoutes'));
+app.use('/api/v1/budgets', require('./routes/budgetRoutes'));
+app.use('/api/settings', require('./routes/settings'));
+app.use('/api/v1/chatbot', require('./routes/chatbotRoutes'));
+app.use('/api/v1/trading', require('./routes/tradingRoutes'));
+app.use('/api/v1/users', require('./routes/userRoutes'));
+
+// 404 handler - must be before error handler
+app.use((req, res, next) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.originalUrl} not found`
+  });
+});
+
+// Global error handling middleware (should be last)
+app.use((err, req, res, next) => {
+  console.error('❌ Global error handler caught:', err);
+
+  // Ensure we always send JSON response
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? {
+      message: err.message,
+      stack: err.stack
+    } : undefined
+  });
+});
 
 module.exports = app;
