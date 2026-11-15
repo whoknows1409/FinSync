@@ -334,7 +334,7 @@ financialGoalSchema.statics.getByType = function(userId) {
   return this.aggregate([
     {
       $match: {
-        user: mongoose.Types.ObjectId(userId),
+        user: new mongoose.Types.ObjectId(userId),
         status: { $in: ['active', 'paused'] },
       },
     },
@@ -352,5 +352,14 @@ financialGoalSchema.statics.getByType = function(userId) {
     },
   ]);
 };
+
+// Include the calculated fields (progress, days remaining, amount remaining) in API responses
+financialGoalSchema.set('toJSON', {
+  virtuals: true,
+  transform: (doc, ret) => {
+    delete ret.__v;
+    return ret;
+  }
+});
 
 module.exports = mongoose.model('FinancialGoal', financialGoalSchema);

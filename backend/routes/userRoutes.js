@@ -95,10 +95,15 @@ router.get('/dashboard', async (req, res) => {
         endDate: { $gte: startOfMonth },
       }).select('name category totalAmount period startDate endDate spentAmount status').lean(),
       FinancialGoal.find({ user: req.user._id, status: 'active' })
-        .select('name targetAmount currentAmount targetDate progressPercentage status')
+        .select('name targetAmount currentAmount targetDate status')
         .lean(),
       TradingAccount.findOne({ user: req.user._id }).select('totalValue tradingStats totalPnL').lean(),
     ]);
+    for (const goal of activeGoals) {
+      goal.progressPercentage = goal.targetAmount > 0
+        ? Math.round((goal.currentAmount / goal.targetAmount) * 100)
+        : 0;
+    }
     const portfolioValue = tradingAccount ? tradingAccount.totalValue : 0;
     // Note: You may need to store historical portfolio values to calculate change
     const portfolioChange = 0; // TODO: Implement portfolio history tracking

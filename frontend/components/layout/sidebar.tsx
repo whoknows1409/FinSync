@@ -47,6 +47,12 @@ const navigation = [
     badge: null,
   },
   {
+    name: "Goals",
+    href: "/goals",
+    icon: Target,
+    badge: null,
+  },
+  {
     name: "Analysis",
     href: "/analysis",
     icon: BarChart3,

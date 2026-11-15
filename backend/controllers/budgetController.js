@@ -87,32 +87,31 @@ exports.addBudget = async (req, res) => {
     let startDate = incoming.startDate ? new Date(incoming.startDate) : undefined;
     let endDate = incoming.endDate ? new Date(incoming.endDate) : undefined;
     if (!startDate || !endDate) {
+      // Budget dates are calendar days stored as UTC midnight, the same as the
+      // YYYY-MM-DD dates the app sends, whatever timezone the server runs in.
       const now = new Date();
+      const year = now.getUTCFullYear();
+      const month = now.getUTCMonth();
+      const day = now.getUTCDate();
+
       if (period === 'daily') {
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        startDate.setHours(0, 0, 0, 0);
-        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate.setHours(23, 59, 59, 999);
+        startDate = new Date(Date.UTC(year, month, day));
+        endDate = new Date(Date.UTC(year, month, day));
       } else if (period === 'weekly') {
-        const day = now.getDay();
-        const diffToMonday = (day + 6) % 7; // 0=Sun -> 6; 1=Mon -> 0
-        startDate = new Date(now);
-        startDate.setDate(now.getDate() - diffToMonday);
-        startDate.setHours(0, 0, 0, 0);
-        endDate = new Date(startDate);
-        endDate.setDate(startDate.getDate() + 6);
-        endDate.setHours(23, 59, 59, 999);
+        const diffToMonday = (now.getUTCDay() + 6) % 7; // 0=Sun -> 6; 1=Mon -> 0
+        startDate = new Date(Date.UTC(year, month, day - diffToMonday));
+        endDate = new Date(Date.UTC(year, month, day - diffToMonday + 6));
       } else if (period === 'quarterly') {
-        const q = Math.floor(now.getMonth() / 3); // 0..3
-        startDate = new Date(now.getFullYear(), q * 3, 1);
-        endDate = new Date(now.getFullYear(), q * 3 + 3, 0);
+        const quarter = Math.floor(month / 3); // 0..3
+        startDate = new Date(Date.UTC(year, quarter * 3, 1));
+        endDate = new Date(Date.UTC(year, quarter * 3 + 3, 0));
       } else if (period === 'yearly') {
-        startDate = new Date(now.getFullYear(), 0, 1);
-        endDate = new Date(now.getFullYear(), 12, 0);
+        startDate = new Date(Date.UTC(year, 0, 1));
+        endDate = new Date(Date.UTC(year, 11, 31));
       } else {
         // monthly default
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        startDate = new Date(Date.UTC(year, month, 1));
+        endDate = new Date(Date.UTC(year, month + 1, 0));
       }
     }
 

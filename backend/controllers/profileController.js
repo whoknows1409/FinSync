@@ -1,6 +1,6 @@
 const User = require('../models/User');
 const Transaction = require('../models/Transaction');
-const Goal = require('../models/Goal');
+const FinancialGoal = require('../models/FinancialGoal');
 const Budget = require('../models/Budget');
 const TradingAccount = require('../models/TradingAccount');
 const Activity = require('../models/Activity');
@@ -263,7 +263,7 @@ exports.getStats = async (req, res) => {
     const totalTransactions = await Transaction.countDocuments({ user: userId });
     
     // Get active goals count
-    const activeGoals = await Goal.countDocuments({ 
+    const activeGoals = await FinancialGoal.countDocuments({ 
       user: userId, 
       status: 'active' 
     });

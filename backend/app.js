@@ -118,6 +118,7 @@ app.use('/api/v1/chatbot', require('./routes/chatbotRoutes'));
 app.use('/api/v1/trading', require('./routes/tradingRoutes'));
 app.use('/api/v1/users', require('./routes/userRoutes'));
 app.use('/api/v1/notifications', require('./routes/notificationRoutes'));
+app.use('/api/v1/goals', require('./routes/goalRoutes'));
 
 // 404 handler - must be before error handler
 app.use((req, res, next) => {

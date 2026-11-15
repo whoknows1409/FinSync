@@ -1,63 +1,192 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useState } from "react"
+import { toast } from "sonner"
+import { goalAPI } from "./api-service"
+import { useAuth } from "./auth-context"
 
-interface FinancialGoal {
-  id: string
-  title: string
+export type GoalType =
+  | "savings"
+  | "debt_payment"
+  | "investment"
+  | "purchase"
+  | "emergency_fund"
+  | "retirement"
+  | "other"
+
+export type GoalPriority = "low" | "medium" | "high" | "critical"
+export type GoalStatus = "active" | "paused" | "completed" | "cancelled"
+
+export interface GoalContribution {
+  _id?: string
+  amount: number
+  date: string
+  source?: string
+  notes?: string
+}
+
+export interface FinancialGoal {
+  _id: string
+  name: string
+  description?: string
+  type: GoalType
   targetAmount: number
   currentAmount: number
-  deadline: string
-  category: "savings" | "investment" | "debt" | "emergency"
+  targetDate: string
+  priority: GoalPriority
+  status: GoalStatus
+  notes?: string
+  contributions: GoalContribution[]
+  // Calculated by the server
+  progressPercentage: number
+  daysRemaining: number
+  amountRemaining: number
+  createdAt?: string
+}
+
+export interface GoalInput {
+  name: string
+  type: GoalType
+  targetAmount: number
+  targetDate: string
+  priority?: GoalPriority
+  notes?: string
+  // Money already saved when the goal is created
+  currentAmount?: number
+}
+
+export interface GoalsSummary {
+  totalGoals: number
+  activeGoals: number
+  completedGoals: number
+  totalTargetAmount: number
+  totalSavedAmount: number
 }
 
 interface GoalsContextType {
   goals: FinancialGoal[]
-  addGoal: (goal: Omit<FinancialGoal, "id">) => void
-  updateGoal: (id: string, updates: Partial<FinancialGoal>) => void
-  deleteGoal: (id: string) => void
+  summary: GoalsSummary
+  loading: boolean
+  error: string | null
+  refreshGoals: () => Promise<void>
+  addGoal: (goal: GoalInput) => Promise<boolean>
+  updateGoal: (id: string, updates: Partial<GoalInput> & { status?: GoalStatus }) => Promise<boolean>
+  deleteGoal: (id: string) => Promise<boolean>
+  // A negative amount takes money out of the goal
+  contribute: (id: string, amount: number, notes?: string) => Promise<boolean>
+}
+
+const EMPTY_SUMMARY: GoalsSummary = {
+  totalGoals: 0,
+  activeGoals: 0,
+  completedGoals: 0,
+  totalTargetAmount: 0,
+  totalSavedAmount: 0,
 }
 
 const GoalsContext = createContext<GoalsContextType | undefined>(undefined)
 
+const messageFrom = (error: unknown, fallback: string) => {
+  const info = (error as any)?.info
+  if (Array.isArray(info?.errors) && info.errors.length > 0) {
+    return info.errors.map((e: any) => e.message).join(". ")
+  }
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
+// Goals are stored on the server. Nothing is loaded until a user is signed in.
 export function GoalsProvider({ children }: { children: React.ReactNode }) {
-  const [goals, setGoals] = useState<FinancialGoal[]>([
-    {
-      id: "1",
-      title: "Emergency Fund",
-      targetAmount: 100000,
-      currentAmount: 45000,
-      deadline: "2024-12-31",
-      category: "emergency",
-    },
-    {
-      id: "2",
-      title: "Vacation Fund",
-      targetAmount: 50000,
-      currentAmount: 12000,
-      deadline: "2024-06-30",
-      category: "savings",
-    },
-  ])
+  const { user } = useAuth()
+  const userId = user?.id
+  const [goals, setGoals] = useState<FinancialGoal[]>([])
+  const [summary, setSummary] = useState<GoalsSummary>(EMPTY_SUMMARY)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const addGoal = (goal: Omit<FinancialGoal, "id">) => {
-    const newGoal: FinancialGoal = {
-      ...goal,
-      id: Math.random().toString(36).substr(2, 9),
+  const refreshGoals = useCallback(async () => {
+    if (!userId) return
+    setLoading(true)
+    try {
+      const response = await goalAPI.getGoals()
+      setGoals(response.data || [])
+      setSummary(response.summary || EMPTY_SUMMARY)
+      setError(null)
+    } catch (err) {
+      setError(messageFrom(err, "Failed to load goals"))
+    } finally {
+      setLoading(false)
     }
-    setGoals((prev) => [...prev, newGoal])
+  }, [userId])
+
+  useEffect(() => {
+    if (!userId) {
+      setGoals([])
+      setSummary(EMPTY_SUMMARY)
+      return
+    }
+    refreshGoals()
+  }, [userId, refreshGoals])
+
+  const addGoal = async (goal: GoalInput) => {
+    try {
+      await goalAPI.addGoal(goal)
+      await refreshGoals()
+      toast.success("Goal created")
+      return true
+    } catch (err) {
+      toast.error(messageFrom(err, "Failed to create goal"))
+      return false
+    }
   }
 
-  const updateGoal = (id: string, updates: Partial<FinancialGoal>) => {
-    setGoals((prev) => prev.map((goal) => (goal.id === id ? { ...goal, ...updates } : goal)))
+  const updateGoal = async (id: string, updates: Partial<GoalInput> & { status?: GoalStatus }) => {
+    try {
+      await goalAPI.updateGoal(id, updates)
+      await refreshGoals()
+      toast.success("Goal updated")
+      return true
+    } catch (err) {
+      toast.error(messageFrom(err, "Failed to update goal"))
+      return false
+    }
   }
 
-  const deleteGoal = (id: string) => {
-    setGoals((prev) => prev.filter((goal) => goal.id !== id))
+  const deleteGoal = async (id: string) => {
+    try {
+      await goalAPI.deleteGoal(id)
+      await refreshGoals()
+      toast.success("Goal deleted")
+      return true
+    } catch (err) {
+      toast.error(messageFrom(err, "Failed to delete goal"))
+      return false
+    }
   }
 
-  return <GoalsContext.Provider value={{ goals, addGoal, updateGoal, deleteGoal }}>{children}</GoalsContext.Provider>
+  const contribute = async (id: string, amount: number, notes?: string) => {
+    try {
+      const response = await goalAPI.addContribution(id, { amount, notes })
+      await refreshGoals()
+      if (amount > 0 && response.data?.status === "completed") {
+        toast.success("Goal reached!")
+      } else {
+        toast.success(amount > 0 ? "Money added to goal" : "Money taken out of goal")
+      }
+      return true
+    } catch (err) {
+      toast.error(messageFrom(err, "Failed to update goal"))
+      return false
+    }
+  }
+
+  return (
+    <GoalsContext.Provider
+      value={{ goals, summary, loading, error, refreshGoals, addGoal, updateGoal, deleteGoal, contribute }}
+    >
+      {children}
+    </GoalsContext.Provider>
+  )
 }
 
 export function useGoals() {

@@ -329,6 +329,12 @@ export const goalAPI = {
   
   deleteGoal: (id) => apiRequest(`/v1/goals/${id}`, {
     method: 'DELETE'
+  }),
+
+  // A negative amount takes money out of the goal
+  addContribution: (id, contribution) => apiRequest(`/v1/goals/${id}/contributions`, {
+    method: 'POST',
+    body: JSON.stringify(contribution)
   })
 };
 

@@ -1,12 +1,11 @@
 const Transaction = require('../models/Transaction');
 const User = require('../models/User');
 const Budget = require('../models/Budget');
-const Goal = require('../models/Goal');
+const FinancialGoal = require('../models/FinancialGoal');
 const RecurringTransaction = require('../models/RecurringTransaction');
 const Activity = require('../models/Activity');
 const ChatHistory = require('../models/ChatHistory');
 const TradingAccount = require('../models/TradingAccount');
-const Stock = require('../models/Stock');
 
 // @desc    Export all user data to JSON
 // @route   GET /api/export/all
@@ -24,18 +23,16 @@ exports.exportAllData = async (req, res) => {
       recurringTransactions,
       activities,
       chatHistory,
-      tradingAccounts,
-      stocks
+      tradingAccount
     ] = await Promise.all([
-      User.findById(userId).select('-password'),
-      Transaction.find({ user: userId }).sort({ date: -1 }),
-      Budget.find({ user: userId }),
-      Goal.find({ user: userId }),
-      RecurringTransaction.find({ user: userId }),
-      Activity.find({ user: userId }).sort({ timestamp: -1 }).limit(100),
-      ChatHistory.find({ user: userId }).sort({ createdAt: -1 }),
-      TradingAccount.find({ user: userId }),
-      Stock.find({ user: userId })
+      User.findById(userId).select('name email createdAt'),
+      Transaction.find({ user: userId }).sort({ date: -1 }).lean(),
+      Budget.find({ user: userId }).sort({ startDate: -1 }).lean(),
+      FinancialGoal.find({ user: userId }).lean(),
+      RecurringTransaction.find({ user: userId }).lean(),
+      Activity.find({ user: userId }).sort({ timestamp: -1 }).limit(100).lean(),
+      ChatHistory.find({ user: userId }).sort({ createdAt: -1 }).lean(),
+      TradingAccount.findOne({ user: userId }).lean()
     ]);
     
     // Compile all data
@@ -53,24 +50,35 @@ exports.exportAllData = async (req, res) => {
         category: t.category,
         type: t.type,
         amount: t.amount,
-        paymentMethod: t.paymentMethod,
+        isRecurring: t.isRecurring,
         tags: t.tags,
         createdAt: t.createdAt
       })),
       budgets: budgets.map(b => ({
+        name: b.name,
         category: b.category,
-        amount: b.amount,
-        month: b.month,
-        spent: b.spent,
+        period: b.period,
+        startDate: b.startDate,
+        endDate: b.endDate,
+        totalAmount: b.totalAmount,
+        spentAmount: b.spentAmount,
+        carriedForward: b.rolloverAmount,
+        status: b.status,
         createdAt: b.createdAt
       })),
       goals: goals.map(g => ({
         name: g.name,
+        type: g.type,
         targetAmount: g.targetAmount,
         currentAmount: g.currentAmount,
-        deadline: g.deadline,
-        category: g.category,
+        targetDate: g.targetDate,
         priority: g.priority,
+        status: g.status,
+        contributions: (g.contributions || []).map(c => ({
+          amount: c.amount,
+          date: c.date,
+          source: c.source
+        })),
         createdAt: g.createdAt
       })),
       recurringTransactions: recurringTransactions.map(rt => ({
@@ -85,33 +93,44 @@ exports.exportAllData = async (req, res) => {
       })),
       activities: activities.map(a => ({
         type: a.type,
-        description: a.description,
-        timestamp: a.timestamp,
-        metadata: a.metadata
+        action: a.action,
+        timestamp: a.timestamp
       })),
       chatHistory: chatHistory.map(ch => ({
         title: ch.title,
         messages: ch.messages,
         createdAt: ch.createdAt
       })),
-      tradingAccounts: tradingAccounts.map(ta => ({
-        accountName: ta.accountName,
-        balance: ta.balance,
-        stockHoldings: ta.stockHoldings
-      })),
-      stocks: stocks.map(s => ({
-        symbol: s.symbol,
-        name: s.name,
-        quantity: s.quantity,
-        averagePrice: s.averagePrice
-      })),
+      trading: tradingAccount ? {
+        walletBalance: tradingAccount.walletBalance,
+        totalValue: tradingAccount.totalValue,
+        holdings: (tradingAccount.holdings || []).map(h => ({
+          symbol: h.symbol,
+          quantity: h.quantity,
+          averagePrice: h.averagePrice,
+          sector: h.sector
+        })),
+        orders: (tradingAccount.orders || []).map(o => ({
+          id: o.id,
+          symbol: o.symbol,
+          type: o.type,
+          orderType: o.orderType,
+          quantity: o.quantity,
+          price: o.price,
+          status: o.status,
+          executedPrice: o.executedPrice,
+          executedAt: o.executedAt,
+          placedAt: o.timestamp
+        }))
+      } : null,
       summary: {
         totalTransactions: transactions.length,
         totalBudgets: budgets.length,
         totalGoals: goals.length,
         totalRecurringTransactions: recurringTransactions.length,
         totalActivities: activities.length,
-        totalChatHistory: chatHistory.length
+        totalChatHistory: chatHistory.length,
+        totalOrders: tradingAccount ? (tradingAccount.orders || []).length : 0
       }
     };
     
@@ -125,6 +144,19 @@ exports.exportAllData = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+// One CSV field: quoted, with quotes doubled. Text that a spreadsheet would read
+// as a formula (starting with = + - @) gets a leading apostrophe.
+const csvField = value => {
+  let text = value instanceof Date ? value.toISOString().slice(0, 10) : String(value ?? '');
+  if (typeof value === 'string' && /^[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+};
+
+const transactionsToCsv = transactions => [
+  ['Date', 'Description', 'Category', 'Type', 'Amount'].join(','),
+  ...transactions.map(t => [t.date, t.description, t.category, t.type, t.amount].map(csvField).join(','))
+].join('\n') + '\n';
 
 // @desc    Export transactions to CSV
 // @route   GET /api/export/csv
@@ -145,12 +177,7 @@ exports.exportToCSV = async (req, res) => {
     
     const transactions = await Transaction.find(query).sort({ date: -1 });
     
-    // Create CSV content
-    let csvContent = "Date,Description,Category,Type,Amount\n";
-    
-    transactions.forEach(transaction => {
-      csvContent += `${transaction.date},${transaction.description},${transaction.category},${transaction.type},${transaction.amount}\n`;
-    });
+    const csvContent = transactionsToCsv(transactions);
     
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename=transactions-${new Date().toISOString().split('T')[0]}.csv`);
