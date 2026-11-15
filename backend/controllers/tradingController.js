@@ -1,14 +1,28 @@
 const TradingAccount = require('../models/TradingAccount');
 const Stock = require('../models/Stock');
 const stockService = require('../services/stockService');
+const orderEngine = require('../services/orderEngine');
+const { matchTrades, summarizeClosedTrades } = require('../services/tradeStats');
+const { withLock } = require('../utils/keyedLock');
 const logger = require('../utils/logger');
+
+// Fill any limit orders whose price has been reached before showing the account.
+// Never fails the request: the account is still readable if this cannot run.
+async function settlePendingOrders(userId) {
+  try {
+    await orderEngine.processPendingOrdersForUser(userId);
+  } catch (error) {
+    logger.error(`Could not process pending orders: ${error.message}`);
+  }
+}
 
 // @desc    Get trading account with improved error handling
 // @route   GET /api/v1/trading/account
 // @access  Private
 exports.getTradingAccount = async (req, res) => {
   try {
-    logger.info('Getting trading account for user:', req.user._id);
+    await settlePendingOrders(req.user._id);
+
     let tradingAccount = await TradingAccount.findOne({ user: req.user._id })
       .populate('holdings.stock', 'symbol name')
       .populate('orders.stock', 'symbol name');
@@ -62,11 +76,13 @@ exports.getTradingAccount = async (req, res) => {
 // @desc    Place order with improved error handling
 // @route   POST /api/v1/trading/orders
 // @access  Private
-exports.placeOrder = async (req, res) => {
+// Orders for one account run one at a time, so two orders placed together
+// cannot both spend the same wallet balance.
+exports.placeOrder = (req, res) =>
+  withLock(orderEngine.tradingLockKey(req.user._id), () => placeOrderLocked(req, res));
+
+async function placeOrderLocked(req, res) {
   try {
-    logger.info('=== PLACE ORDER START ===');
-    logger.info('Request body:', JSON.stringify(req.body, null, 2));
-    
     const { symbol, type, quantity, price, orderType, stock } = req.body;
 
     // Validation
@@ -243,16 +259,6 @@ exports.placeOrder = async (req, res) => {
 
     // Place order
     try {
-      logger.info('Placing order in trading account');
-      logger.info('Order data:', {
-        stock: stockData._id,
-        symbol: stockData.symbol,
-        type,
-        quantity: parseInt(quantity),
-        price: orderType === 'MARKET' ? stockData.currentPrice : parseFloat(price),
-        orderType
-      });
-      
       const order = await tradingAccount.placeOrder({
         stock: stockData._id,
         symbol: stockData.symbol,
@@ -262,34 +268,44 @@ exports.placeOrder = async (req, res) => {
         orderType
       });
 
-      logger.info('Order created:', order);
-
-      // Execute market orders immediately
       if (orderType === 'MARKET') {
-        logger.info('Executing market order immediately');
+        // Market orders fill immediately. If that fails nothing is saved.
+        await tradingAccount.executeOrder(order.id);
+      } else {
+        // A limit order already at or beyond its price fills now; otherwise it
+        // stays pending and the order engine fills it when the price gets there.
+        let quote = null;
         try {
-          await tradingAccount.executeOrder(order.id);
-          logger.info('Order executed successfully');
-        } catch (execError) {
-          logger.error('Order execution error:', execError);
-          
-          order.status = 'CANCELLED';
-          order.cancelReason = execError.message;
-          logger.info('Order cancelled due to execution error');
-          
-          throw execError;
+          quote = await stockService.getRealTimePrice(stockData.symbol);
+        } catch (priceError) {
+          logger.warn(`No live price for ${stockData.symbol}; limit order left pending: ${priceError.message}`);
+        }
+        if (quote && TradingAccount.isLimitPriceReached(order, quote.currentPrice)) {
+          await tradingAccount.executeOrder(order.id, { quote });
         }
       }
 
-      logger.info('Saving trading account');
       await tradingAccount.save();
-      logger.info('Trading account saved successfully');
 
-      logger.info('=== PLACE ORDER SUCCESS ===');
+      const savedOrder = tradingAccount.orders.find(o => o.id === order.id);
+      const executed = savedOrder.status === 'EXECUTED';
+      const message = orderType === 'MARKET' || executed
+        ? 'Order placed successfully'
+        : `Limit order placed. It will execute when the price reaches ₹${savedOrder.price}.`;
+
+      logger.info('Order placed', {
+        userId: String(req.user._id),
+        orderId: savedOrder.id,
+        symbol: savedOrder.symbol,
+        type: savedOrder.type,
+        orderType: savedOrder.orderType,
+        status: savedOrder.status,
+      });
+
       res.status(201).json({
         success: true,
-        message: 'Order placed successfully',
-        data: { order },
+        message,
+        data: { order: savedOrder },
       });
     } catch (error) {
       logger.error('Order placement error:', error);
@@ -305,14 +321,15 @@ exports.placeOrder = async (req, res) => {
       message: 'Failed to place order'
     });
   }
-};
+}
 
 // @desc    Get holdings with improved error handling
 // @route   GET /api/v1/trading/holdings
 // @access  Private
 exports.getHoldings = async (req, res) => {
   try {
-    logger.info('Getting holdings for user:', req.user._id);
+    await settlePendingOrders(req.user._id);
+
     const tradingAccount = await TradingAccount.findOne({ user: req.user._id })
       .populate('holdings.stock', 'symbol name');
 
@@ -337,7 +354,7 @@ exports.getHoldings = async (req, res) => {
 
     const formattedHoldings = tradingAccount.holdings.map(holding => ({
       symbol: holding.symbol,
-      name: holding.stock.name,
+      name: holding.stock?.name || holding.symbol,
       quantity: holding.quantity,
       averagePrice: holding.averagePrice,
       currentPrice: holding.currentPrice,
@@ -366,7 +383,8 @@ exports.getHoldings = async (req, res) => {
 // @access  Private
 exports.getOrders = async (req, res) => {
   try {
-    logger.info('Getting orders for user:', req.user._id);
+    await settlePendingOrders(req.user._id);
+
     const tradingAccount = await TradingAccount.findOne({ user: req.user._id })
       .populate('orders.stock', 'symbol name');
 
@@ -381,7 +399,7 @@ exports.getOrders = async (req, res) => {
     const formattedOrders = tradingAccount.orders.map(order => ({
       id: order.id,
       symbol: order.symbol,
-      name: order.stock.name,
+      name: order.stock?.name || order.symbol,
       type: order.type,
       quantity: order.quantity,
       price: order.price,
@@ -389,7 +407,8 @@ exports.getOrders = async (req, res) => {
       status: order.status,
       timestamp: order.timestamp,
       executedAt: order.executedAt,
-      executedPrice: order.executedPrice
+      executedPrice: order.executedPrice,
+      cancelReason: order.cancelReason
     }));
 
     logger.info('Orders retrieved:', formattedOrders.length);
@@ -409,7 +428,10 @@ exports.getOrders = async (req, res) => {
 // @desc    Cancel order with improved error handling
 // @route   PUT /api/v1/trading/orders/:id/cancel
 // @access  Private
-exports.cancelOrder = async (req, res) => {
+exports.cancelOrder = (req, res) =>
+  withLock(orderEngine.tradingLockKey(req.user._id), () => cancelOrderLocked(req, res));
+
+async function cancelOrderLocked(req, res) {
   try {
     logger.info('Cancelling order:', req.params.id);
     const tradingAccount = await TradingAccount.findOne({ user: req.user._id });
@@ -455,155 +477,71 @@ exports.cancelOrder = async (req, res) => {
       message: 'Failed to cancel order',
     });
   }
-};
+}
 
-// @desc    Get trading stats with improved error handling
+// @desc    Get trading stats
 // @route   GET /api/v1/trading/stats
 // @access  Private
+//
+// Read-only: trades are worked out from a copy of the order history, so loading
+// this page never changes stored orders.
 exports.getTradingStats = async (req, res) => {
   try {
-    logger.info('Getting trading stats for user:', req.user._id);
-    const tradingAccount = await TradingAccount.findOne({ user: req.user._id });
-    
+    const tradingAccount = await TradingAccount.findOne({ user: req.user._id }).lean();
+
     if (!tradingAccount) {
-      logger.error('Trading account not found');
       return res.status(404).json({
         success: false,
         message: 'Trading account not found'
       });
     }
-    
-    // Get all executed orders
-    const orders = tradingAccount.orders.filter(order => order.status === 'EXECUTED');
-    
-    // Process orders to create trades
-    const trades = [];
-    const buyOrders = orders.filter(order => order.type === 'BUY');
-    const sellOrders = orders.filter(order => order.type === 'SELL');
-    
-    // Create a map to track quantities
-    const holdings = {};
-    
-    // Process buy orders
-    for (const buyOrder of buyOrders) {
-      if (!holdings[buyOrder.symbol]) {
-        holdings[buyOrder.symbol] = {
-          quantity: 0,
-          totalCost: 0,
-          orders: []
-        };
+
+    const { closedTrades, openPositions } = matchTrades(tradingAccount.orders);
+    const summary = summarizeClosedTrades(closedTrades);
+    const firstBuyDate = new Map(openPositions.map(position => [position.symbol, position.buyDate]));
+
+    // Open positions come from the holdings, which the order engine keeps exact
+    const openTrades = await Promise.all((tradingAccount.holdings || []).map(async holding => {
+      let currentPrice = holding.currentPrice;
+      try {
+        const quote = await stockService.getRealTimePrice(holding.symbol);
+        currentPrice = quote.currentPrice;
+      } catch (error) {
+        logger.warn(`Using last saved price for ${holding.symbol}: ${error.message}`);
       }
-      
-      holdings[buyOrder.symbol].quantity += buyOrder.quantity;
-      holdings[buyOrder.symbol].totalCost += buyOrder.executedPrice * buyOrder.quantity;
-      holdings[buyOrder.symbol].orders.push(buyOrder);
-    }
-    
-    // Process sell orders and create trades
-    for (const sellOrder of sellOrders) {
-      if (!holdings[sellOrder.symbol] || holdings[sellOrder.symbol].quantity === 0) {
-        continue;
-      }
-      
-      const holding = holdings[sellOrder.symbol];
-      let remainingQuantity = sellOrder.quantity;
-      
-      // Find matching buy orders (FIFO)
-      for (let i = 0; i < holding.orders.length && remainingQuantity > 0; i++) {
-        const buyOrder = holding.orders[i];
-        const tradeQuantity = Math.min(remainingQuantity, buyOrder.quantity);
-        
-        // Calculate profit/loss
-        const buyValue = buyOrder.executedPrice * tradeQuantity;
-        const sellValue = sellOrder.executedPrice * tradeQuantity;
-        const profitLoss = sellValue - buyValue;
-        const profitLossPercentage = (profitLoss / buyValue) * 100;
-        
-        // Add trade
-        trades.push({
-          symbol: sellOrder.symbol,
-          name: sellOrder.symbol,
-          buyPrice: buyOrder.executedPrice,
-          buyDate: buyOrder.executedAt,
-          sellPrice: sellOrder.executedPrice,
-          sellDate: sellOrder.executedAt,
-          quantity: tradeQuantity,
-          profitLoss: profitLoss,
-          profitLossPercentage: profitLossPercentage,
-          status: 'CLOSED'
-        });
-        
-        // Update holding
-        holding.quantity -= tradeQuantity;
-        holding.totalCost -= buyOrder.executedPrice * tradeQuantity;
-        buyOrder.quantity -= tradeQuantity;
-        remainingQuantity -= tradeQuantity;
-        
-        // Remove buy order if fully used
-        if (buyOrder.quantity === 0) {
-          holding.orders.splice(i, 1);
-          i--;
-        }
-      }
-    }
-    
-    // Add remaining holdings as open trades
-    for (const symbol in holdings) {
-      const holding = holdings[symbol];
-      if (holding.quantity > 0) {
-        const averagePrice = holding.totalCost / holding.quantity;
-        
-        // Get current price for the stock
-        let currentPrice = averagePrice;
-        
-        try {
-          const stockData = await stockService.getRealTimePrice(symbol);
-          currentPrice = stockData.currentPrice;
-        } catch (error) {
-          logger.error(`Error fetching current price for ${symbol}:`, error);
-        }
-        
-        // Calculate unrealized P&L
-        const unrealizedPnL = (currentPrice - averagePrice) * holding.quantity;
-        const unrealizedPnLPercentage = (unrealizedPnL / (averagePrice * holding.quantity)) * 100;
-        
-        trades.push({
-          symbol: symbol,
-          name: symbol,
-          buyPrice: averagePrice,
-          buyDate: holding.orders[0]?.executedAt || new Date(),
-          quantity: holding.quantity,
-          profitLoss: unrealizedPnL,
-          profitLossPercentage: unrealizedPnLPercentage,
-          status: 'OPEN'
-        });
-      }
-    }
-    
-    // Calculate total P&L from trades
-    const totalPnL = trades.reduce((sum, trade) => sum + (trade.profitLoss || 0), 0);
-    
-    // Update trading account total P&L
-    tradingAccount.totalPnL = totalPnL;
-    await tradingAccount.save();
-    
-    // Prepare response
-    const stats = {
-      totalTrades: tradingAccount.tradingStats.totalTrades,
-      winRate: tradingAccount.tradingStats.winRate,
-      totalPnL: totalPnL,
-      portfolioValue: tradingAccount.totalValue,
-      bestTrade: tradingAccount.tradingStats.bestTrade,
-      worstTrade: tradingAccount.tradingStats.worstTrade,
-      averageHoldingTime: tradingAccount.tradingStats.averageHoldingTime,
-      totalVolume: tradingAccount.tradingStats.totalVolume,
-      trades: trades
-    };
-    
-    logger.info('Sending trading stats response');
+
+      const cost = holding.averagePrice * holding.quantity;
+      const profitLoss = (currentPrice - holding.averagePrice) * holding.quantity;
+      return {
+        symbol: holding.symbol,
+        name: holding.symbol,
+        buyPrice: holding.averagePrice,
+        buyDate: firstBuyDate.get(holding.symbol) || tradingAccount.createdAt,
+        quantity: holding.quantity,
+        profitLoss,
+        profitLossPercentage: cost > 0 ? (profitLoss / cost) * 100 : 0,
+        status: 'OPEN'
+      };
+    }));
+
+    const unrealizedPnL = openTrades.reduce((sum, trade) => sum + trade.profitLoss, 0);
+    const storedStats = tradingAccount.tradingStats || {};
+
     res.json({
       success: true,
-      data: stats
+      data: {
+        totalTrades: storedStats.totalTrades || 0,
+        winRate: summary.winRate,
+        totalPnL: summary.realizedPnL + unrealizedPnL,
+        realizedPnL: summary.realizedPnL,
+        unrealizedPnL,
+        portfolioValue: tradingAccount.totalValue,
+        bestTrade: summary.bestTrade,
+        worstTrade: summary.worstTrade,
+        averageHoldingTime: summary.averageHoldingTime,
+        totalVolume: storedStats.totalVolume || 0,
+        trades: [...closedTrades, ...openTrades]
+      }
     });
   } catch (error) {
     logger.error('Get trading stats error:', error);

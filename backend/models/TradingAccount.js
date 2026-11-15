@@ -1,8 +1,13 @@
 const mongoose = require('mongoose');
 const stockService = require('../services/stockService');
 
-// Maximum allowed price slippage (in percentage) - only for limit orders
-const MAX_PRICE_SLIPPAGE = 2;
+// A limit order that has not reached its price is cancelled after this many days
+const LIMIT_ORDER_VALIDITY_DAYS = 7;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// A buy limit fills at the limit price or lower, a sell limit at the limit price or higher
+const isLimitPriceReached = (order, currentPrice) =>
+  order.type === 'BUY' ? currentPrice <= order.price : currentPrice >= order.price;
 
 const holdingSchema = new mongoose.Schema({
   stock: {
@@ -294,10 +299,13 @@ tradingAccountSchema.methods.placeOrder = async function(orderData) {
   }
 };
 
-// Execute order method with price slippage protection only for limit orders
-tradingAccountSchema.methods.executeOrder = async function(orderId) {
+// Execute a pending order at the live price. Market orders fill straight away;
+// limit orders fill only once the live price has reached the limit.
+// Pass `options.quote` (from stockService.getRealTimePrice) to reuse a price the
+// caller already fetched.
+tradingAccountSchema.methods.executeOrder = async function(orderId, options = {}) {
   const order = this.orders.find(o => o.id === orderId);
-  
+
   if (!order || order.status !== 'PENDING') {
     throw new Error('Order not found or already executed');
   }
@@ -316,39 +324,45 @@ tradingAccountSchema.methods.executeOrder = async function(orderId) {
   }
 
   // Get real-time price
-  let stockData;
-  try {
-    stockData = await stockService.getRealTimePrice(order.symbol);
-    
-    if (stockData.isStale) {
-      console.warn(`Real-time price data for ${order.symbol} is stale, using anyway for market order`);
+  let stockData = options.quote;
+  if (!stockData) {
+    try {
+      stockData = await stockService.getRealTimePrice(order.symbol);
+    } catch (error) {
+      console.error(`Error fetching real-time price for ${order.symbol}:`, error);
+      throw new Error(`Failed to execute order: ${error.message}`);
     }
-  } catch (error) {
-    console.error(`Error fetching real-time price for ${order.symbol}:`, error);
-    throw new Error(`Failed to execute order: ${error.message}`);
   }
 
   const currentPrice = stockData.currentPrice;
-  
-  // Only check price slippage for limit orders
-  if (order.orderType === 'LIMIT') {
-    const priceDiff = Math.abs(currentPrice - order.price) / order.price * 100;
-    
-    if (priceDiff > MAX_PRICE_SLIPPAGE) {
-      throw new Error(`Price slippage (${priceDiff.toFixed(2)}%) exceeds maximum allowed (${MAX_PRICE_SLIPPAGE}%)`);
+  if (!(currentPrice > 0)) {
+    throw new Error('Failed to execute order: no live price available');
+  }
+
+  if (order.orderType === 'LIMIT' && !isLimitPriceReached(order, currentPrice)) {
+    throw new Error(
+      order.type === 'BUY'
+        ? 'Current price is higher than limit price'
+        : 'Current price is lower than limit price'
+    );
+  }
+
+  // Check funds and holdings before changing anything, so an order that cannot
+  // be filled leaves the account exactly as it was.
+  const totalAmount = currentPrice * order.quantity;
+  const holdingIndex = this.holdings.findIndex(h => h.symbol === order.symbol);
+
+  if (order.type === 'BUY' && this.walletBalance < totalAmount) {
+    throw new Error('Insufficient wallet balance');
+  }
+  if (order.type === 'SELL') {
+    if (holdingIndex === -1) {
+      throw new Error('Holding not found');
     }
-    
-    // For limit orders, validate price conditions
-    if (order.type === 'BUY' && currentPrice > order.price) {
-      throw new Error('Current price is higher than limit price');
-    }
-    if (order.type === 'SELL' && currentPrice < order.price) {
-      throw new Error('Current price is lower than limit price');
+    if (this.holdings[holdingIndex].quantity < order.quantity) {
+      throw new Error('Insufficient holding quantity');
     }
   }
-  
-  // Market orders execute at current price without slippage checks
-  console.log(`Executing ${order.orderType} order at current price: ${currentPrice}`);
 
   // Execute the order
   order.status = 'EXECUTED';
@@ -361,14 +375,9 @@ tradingAccountSchema.methods.executeOrder = async function(orderId) {
 
   if (order.type === 'BUY') {
     // Deduct from wallet balance
-    const totalAmount = currentPrice * order.quantity;
-    if (this.walletBalance < totalAmount) {
-      throw new Error('Insufficient wallet balance');
-    }
     this.walletBalance -= totalAmount;
 
     // Update or add holding
-    const holdingIndex = this.holdings.findIndex(h => h.symbol === order.symbol);
     if (holdingIndex === -1) {
       // Add new holding
       // Ensure sector is set, default to 'Unknown' if not provided
@@ -409,21 +418,10 @@ tradingAccountSchema.methods.executeOrder = async function(orderId) {
     }
   } else if (order.type === 'SELL') {
     // Add to wallet balance
-    const totalAmount = currentPrice * order.quantity;
     this.walletBalance += totalAmount;
 
-    // Update holding
-    const holdingIndex = this.holdings.findIndex(h => h.symbol === order.symbol);
-    
-    if (holdingIndex === -1) {
-      throw new Error('Holding not found');
-    }
-
     const holding = this.holdings[holdingIndex];
-    if (holding.quantity < order.quantity) {
-      throw new Error('Insufficient holding quantity');
-    }
-    
+
     // Calculate realized P&L
     const realizedPnL = (currentPrice - holding.averagePrice) * order.quantity;
     
@@ -465,9 +463,11 @@ tradingAccountSchema.methods.executeOrder = async function(orderId) {
     this.totalPnL = (this.totalPnL || 0) + realizedPnL;
   }
 
-  // Update win rate with defensive checks
-  this.tradingStats.winRate = this.tradingStats.totalTrades > 0 
-    ? (this.tradingStats.successfulTrades / this.tradingStats.totalTrades) * 100 
+  // Win rate is profitable sells out of all sells. Buys open a position and
+  // have no profit or loss yet, so they are not part of it.
+  const executedSells = this.orders.filter(o => o.status === 'EXECUTED' && o.type === 'SELL').length;
+  this.tradingStats.winRate = executedSells > 0
+    ? Math.min(100, ((this.tradingStats.successfulTrades || 0) / executedSells) * 100)
     : 0;
 
   // Update total value
@@ -475,6 +475,55 @@ tradingAccountSchema.methods.executeOrder = async function(orderId) {
 
   return this; // Return the account instance for chaining
 };
+
+// Fill or expire this account's pending limit orders against live prices.
+// Saves the account when anything changed and reports what happened.
+tradingAccountSchema.methods.processPendingOrders = async function(now = new Date()) {
+  const pending = this.orders.filter(o => o.status === 'PENDING' && o.orderType === 'LIMIT');
+  const filled = [];
+  const cancelled = [];
+  const quotes = new Map();
+
+  for (const order of pending) {
+    if (now - new Date(order.timestamp) > LIMIT_ORDER_VALIDITY_DAYS * MS_PER_DAY) {
+      order.status = 'CANCELLED';
+      order.cancelReason = `Expired: limit price was not reached within ${LIMIT_ORDER_VALIDITY_DAYS} days`;
+      cancelled.push(order);
+      continue;
+    }
+
+    let quote = quotes.get(order.symbol);
+    if (!quote) {
+      try {
+        quote = await stockService.getRealTimePrice(order.symbol);
+        quotes.set(order.symbol, quote);
+      } catch (error) {
+        // No live price right now; leave the order pending and try again later
+        continue;
+      }
+    }
+
+    if (!isLimitPriceReached(order, quote.currentPrice)) continue;
+
+    try {
+      await this.executeOrder(order.id, { quote });
+      filled.push(order);
+    } catch (error) {
+      order.status = 'CANCELLED';
+      order.cancelReason = error.message;
+      cancelled.push(order);
+    }
+  }
+
+  if (filled.length > 0 || cancelled.length > 0) {
+    await this.save();
+  }
+
+  return { filled, cancelled };
+};
+
+tradingAccountSchema.statics.isLimitPriceReached = isLimitPriceReached;
+tradingAccountSchema.statics.LIMIT_ORDER_VALIDITY_DAYS = LIMIT_ORDER_VALIDITY_DAYS;
 
 // Update holding prices method
 tradingAccountSchema.methods.updateHoldingPrices = async function() {

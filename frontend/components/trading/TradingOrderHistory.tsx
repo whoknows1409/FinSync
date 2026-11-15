@@ -26,6 +26,7 @@ interface Order {
   orderType: 'MARKET' | 'LIMIT'
   executedAt?: string
   executedPrice?: number
+  cancelReason?: string
 }
 
 interface TradingOrderHistoryProps {
@@ -161,7 +162,12 @@ export default function TradingOrderHistory({ orders, onOrderCancelled, isLoadin
                 <TableCell>
                   <Badge variant="outline">{order.orderType}</Badge>
                 </TableCell>
-                <TableCell>{getStatusBadge(order.status)}</TableCell>
+                <TableCell>
+                  {getStatusBadge(order.status)}
+                  {order.status === 'CANCELLED' && order.cancelReason && (
+                    <p className="mt-1 max-w-[14rem] text-xs text-muted-foreground">{order.cancelReason}</p>
+                  )}
+                </TableCell>
                 <TableCell>{formatDate(order.timestamp)}</TableCell>
                 <TableCell>
                   {order.status === 'PENDING' && (

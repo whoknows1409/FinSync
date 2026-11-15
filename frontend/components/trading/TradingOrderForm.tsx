@@ -811,12 +811,22 @@ export default function TradingOrderForm({
         orderPayload.price = finalPrice;
       }
       
-      await placeOrder(orderPayload);
+      const placedOrder: any = await placeOrder(orderPayload);
 
-      toast({
-        title: 'Success',
-        description: `${orderDetails.type === 'BUY' ? 'Bought' : 'Sold'} ${orderDetails.quantity} ${orderDetails.symbol} @ ₹${finalPrice.toFixed(2)}`,
-      });
+      // A limit order that has not reached its price yet is saved as pending
+      // and fills later, so don't report it as bought or sold.
+      if (placedOrder?.status === 'PENDING') {
+        toast({
+          title: 'Limit order placed',
+          description: `${orderDetails.type === 'BUY' ? 'Buy' : 'Sell'} ${orderDetails.quantity} ${orderDetails.symbol} will execute when the price reaches ₹${Number(orderDetails.price).toFixed(2)}. You can cancel it from your order history.`,
+        });
+      } else {
+        const filledPrice = Number(placedOrder?.executedPrice) > 0 ? Number(placedOrder.executedPrice) : finalPrice;
+        toast({
+          title: 'Success',
+          description: `${orderDetails.type === 'BUY' ? 'Bought' : 'Sold'} ${orderDetails.quantity} ${orderDetails.symbol} @ ₹${filledPrice.toFixed(2)}`,
+        });
+      }
 
       // Reset form
       setStockSymbol(null);

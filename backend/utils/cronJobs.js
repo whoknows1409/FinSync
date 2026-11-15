@@ -180,4 +180,19 @@ cron.schedule('0 0 * * *', async () => {
   }
 });
 
+// Fill pending limit orders every two minutes while the NSE is open
+// (Mon-Fri, 09:00-15:59 IST). Outside those hours prices do not move, and
+// orders are also checked whenever a user opens their trading account.
+cron.schedule('*/2 9-15 * * 1-5', async () => {
+  try {
+    const orderEngine = require('../services/orderEngine');
+    const result = await orderEngine.processAllPendingOrders();
+    if (result.filled > 0 || result.cancelled > 0) {
+      console.log(`Pending limit orders: ${result.filled} filled, ${result.cancelled} cancelled`);
+    }
+  } catch (error) {
+    console.error('Error processing pending limit orders:', error);
+  }
+}, { timezone: 'Asia/Kolkata' });
+
 console.log('Cron job for recurring transactions scheduled');
