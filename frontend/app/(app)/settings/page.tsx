@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useTheme } from "next-themes"
 import { User, Bell, Shield, Palette, Database, Upload } from "lucide-react"
 import { toast } from "sonner"
+import { profileAPI } from "@/lib/api-service"
 
 export default function SettingsPage() {
   const { user, updateUser } = useAuth()
@@ -22,6 +23,40 @@ export default function SettingsPage() {
     budgetAlerts: true,
     stockAlerts: true,
   })
+
+  // Notification preferences are stored on the account, so they apply on every device
+  useEffect(() => {
+    let cancelled = false
+    profileAPI.getProfile()
+      .then((response: any) => {
+        const saved = response?.data?.notificationPreferences
+        if (!cancelled && saved) {
+          setNotifications({
+            budgetAlerts: saved.budgetAlerts !== false,
+            stockAlerts: saved.stockAlerts !== false,
+          })
+        }
+      })
+      .catch(() => {
+        // Keep the defaults if the profile cannot be loaded
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleNotificationToggle = async (key: "budgetAlerts" | "stockAlerts", checked: boolean) => {
+    const previous = notifications
+    const next = { ...notifications, [key]: checked }
+    setNotifications(next)
+    try {
+      await profileAPI.updateProfile({ notificationPreferences: next })
+      toast.success("Notification preferences saved")
+    } catch {
+      setNotifications(previous)
+      toast.error("Could not save your notification preferences")
+    }
+  }
 
   const handleThemeToggle = (checked: boolean) => {
     setIsDarkMode(checked)
@@ -165,26 +200,22 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <Label>Budget Alerts</Label>
-                  <p className="text-sm text-muted-foreground">Get notified when you exceed budget limits</p>
+                  <p className="text-sm text-muted-foreground">Get notified when a budget is nearly used up or exceeded</p>
                 </div>
                 <Switch
                   checked={notifications.budgetAlerts}
-                  onCheckedChange={(checked) =>
-                    setNotifications({ ...notifications, budgetAlerts: checked })
-                  }
+                  onCheckedChange={(checked) => handleNotificationToggle("budgetAlerts", checked)}
                 />
               </div>
               <Separator />
               <div className="flex items-center justify-between">
                 <div>
-                  <Label>Stock Alerts</Label>
-                  <p className="text-sm text-muted-foreground">Price alerts for your watchlist</p>
+                  <Label>Trading Alerts</Label>
+                  <p className="text-sm text-muted-foreground">Get notified when a limit order is filled or cancelled</p>
                 </div>
                 <Switch
                   checked={notifications.stockAlerts}
-                  onCheckedChange={(checked) =>
-                    setNotifications({ ...notifications, stockAlerts: checked })
-                  }
+                  onCheckedChange={(checked) => handleNotificationToggle("stockAlerts", checked)}
                 />
               </div>
             </div>

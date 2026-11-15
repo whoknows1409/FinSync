@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useUI } from "@/lib/ui-context"
+import { useNotifications } from "@/lib/notifications-context"
 import Image from "next/image"
 
 // Custom Logo Component using the new logo image
@@ -37,6 +38,7 @@ export function Header() {
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
   const pathname = usePathname()
   const { toggleMobileMenu } = useUI()
+  const { unreadCount } = useNotifications()
 
   const toggleAuthMode = () => {
     setAuthMode(authMode === "login" ? "signup" : "login")
@@ -91,8 +93,17 @@ export function Header() {
             {user && (
               <>
                 <Button variant="ghost" size="icon" asChild>
-                  <Link href="/notifications" className="flex items-center justify-center">
+                  <Link
+                    href="/notifications"
+                    className="relative flex items-center justify-center"
+                    aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+                  >
                     <Bell className="h-5 w-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
                   </Link>
                 </Button>
                 

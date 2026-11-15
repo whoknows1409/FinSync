@@ -292,6 +292,27 @@ export const budgetAPI = {
   }
 };
 
+// Notification API
+export const notificationAPI = {
+  getNotifications: () => apiRequest('/v1/notifications'),
+
+  markAsRead: (id) => apiRequest(`/v1/notifications/${id}/read`, {
+    method: 'PUT'
+  }),
+
+  markAllAsRead: () => apiRequest('/v1/notifications/read-all', {
+    method: 'PUT'
+  }),
+
+  deleteNotification: (id) => apiRequest(`/v1/notifications/${id}`, {
+    method: 'DELETE'
+  }),
+
+  clearNotifications: () => apiRequest('/v1/notifications', {
+    method: 'DELETE'
+  })
+};
+
 // Goal API
 export const goalAPI = {
   getGoals: () => apiRequest('/v1/goals'),
