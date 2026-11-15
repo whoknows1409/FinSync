@@ -611,9 +611,12 @@ const getUserFinancialContext = async (userId) => {
       endDate: { $gte: startOfMonth },
     });
 
-    const overBudgetCount = budgets.filter(b => b.spentAmount > b.totalAmount).length;
-    const avgUtilization = budgets.length > 0 ? 
-      budgets.reduce((sum, b) => sum + (b.spentAmount / b.totalAmount * 100), 0) / budgets.length : 0;
+    // Placeholder budgets with no amount set are left out: they cannot be
+    // over budget and would make the average a division by zero.
+    const fundedBudgets = budgets.filter(b => b.totalAmount > 0);
+    const overBudgetCount = fundedBudgets.filter(b => b.spentAmount > b.totalAmount).length;
+    const avgUtilization = fundedBudgets.length > 0 ?
+      fundedBudgets.reduce((sum, b) => sum + (b.spentAmount / b.totalAmount * 100), 0) / fundedBudgets.length : 0;
 
     // Get active goals
     const goals = await FinancialGoal.find({

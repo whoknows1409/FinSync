@@ -17,6 +17,33 @@ router.use(protect);
 // @access  Private
 router.get('/', validatePagination, handleValidationErrors, budgetController.getBudgets);
 
+// @desc    Create new budget
+// @route   POST /api/budgets
+// @access  Private
+router.post('/', validateBudget.create, handleValidationErrors, budgetController.addBudget);
+
+// Fixed paths are registered before /:id so they are not read as a budget ID.
+
+// @desc    Get budget summary
+// @route   GET /api/budgets/summary
+// @access  Private
+router.get('/summary', validateDateRange, handleValidationErrors, budgetController.getBudgetSummary);
+
+// @desc    Get category performance
+// @route   GET /api/budgets/category-performance
+// @access  Private
+router.get('/category-performance', validateDateRange, handleValidationErrors, budgetController.getCategoryPerformance);
+
+// @desc    Synchronize budget categories with transaction categories
+// @route   POST /api/budgets/sync-categories
+// @access  Private
+router.post('/sync-categories', budgetController.syncCategories);
+
+// @desc    Clean up zero amount budgets
+// @route   DELETE /api/budgets/cleanup
+// @access  Private
+router.delete('/cleanup', budgetController.cleanupZeroAmountBudgets);
+
 // @desc    Get single budget
 // @route   GET /api/budgets/:id
 // @access  Private
@@ -52,11 +79,6 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// @desc    Create new budget
-// @route   POST /api/budgets
-// @access  Private
-router.post('/', validateBudget.create, handleValidationErrors, budgetController.addBudget);
-
 // @desc    Update budget
 // @route   PUT /api/budgets/:id
 // @access  Private
@@ -71,25 +93,5 @@ router.delete('/:id', budgetController.deleteBudget);
 // @route   PUT /api/budgets/:id/update-spent
 // @access  Private
 router.put('/:id/update-spent', budgetController.updateSpentAmount);
-
-// @desc    Get budget summary
-// @route   GET /api/budgets/summary
-// @access  Private
-router.get('/summary', validateDateRange, handleValidationErrors, budgetController.getBudgetSummary);
-
-// @desc    Get category performance
-// @route   GET /api/budgets/category-performance
-// @access  Private
-router.get('/category-performance', validateDateRange, handleValidationErrors, budgetController.getCategoryPerformance);
-
-// @desc    Synchronize budget categories with transaction categories
-// @route   POST /api/budgets/sync-categories
-// @access  Private
-router.post('/sync-categories', budgetController.syncCategories);
-
-// @desc    Clean up zero amount budgets
-// @route   DELETE /api/budgets/cleanup
-// @access  Private
-router.delete('/cleanup', budgetController.cleanupZeroAmountBudgets);
 
 module.exports = router;

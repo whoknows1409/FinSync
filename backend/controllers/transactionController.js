@@ -1,8 +1,27 @@
 const Transaction = require('../models/Transaction');
 const RecurringTransaction = require('../models/RecurringTransaction');
 const Activity = require('../models/Activity');
-const Budget = require('../models/Budget');
 const { syncBudgetCategories } = require('../utils/categorySync');
+const budgetService = require('../services/budgetService');
+const recurringService = require('../services/recurringService');
+const { notify, formatRupees } = require('../services/notificationService');
+
+// Expenses at or above this amount get a "large expense" notification
+const LARGE_EXPENSE_AMOUNT = 5000;
+const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+
+// Copy only the listed fields from a request body, so a client cannot set
+// anything else (such as the owner of a record).
+const pick = (source, fields) => {
+  const result = {};
+  for (const field of fields) {
+    if (source[field] !== undefined) result[field] = source[field];
+  }
+  return result;
+};
+
+const TRANSACTION_FIELDS = ['type', 'amount', 'category', 'description', 'date', 'tags', 'aiCategorized'];
+const RECURRING_FIELDS = ['type', 'amount', 'category', 'description', 'frequency', 'startDate', 'endDate', 'isActive'];
 
 // Helper function to handle errors
 const handleError = (res, error, message) => {
@@ -31,6 +50,14 @@ const logActivity = async (userId, action, type, category = null) => {
 // @access  Private
 exports.getTransactions = async (req, res) => {
   try {
+    // Add any recurring transactions that have fallen due, so the list is
+    // complete even if the nightly job did not run.
+    try {
+      await recurringService.processDueTransactions(req.user._id);
+    } catch (recurringError) {
+      console.error('Recurring transaction processing failed:', recurringError);
+    }
+
     const transactions = await Transaction.find({ user: req.user.id })
       .sort({ date: -1 }); // Sort by date in descending order (newest first)
 
@@ -76,6 +103,21 @@ exports.addTransaction = async (req, res) => {
       await updateBudgetForTransaction(req.user.id, category, new Date(date));
     }
 
+    if (
+      type === 'expense' &&
+      transaction.amount >= LARGE_EXPENSE_AMOUNT &&
+      Date.now() - transaction.date.getTime() < MS_PER_WEEK
+    ) {
+      await notify(req.user.id, {
+        category: 'transaction',
+        severity: 'info',
+        title: 'Large expense recorded',
+        message: `${formatRupees(transaction.amount)} on ${transaction.description} (${category}).`,
+        link: '/transactions',
+        dedupeKey: `transaction:${transaction._id}:large`,
+      });
+    }
+
     // Log activity with category
     await logActivity(req.user.id, 'Added transaction', 'transaction', category);
 
@@ -100,19 +142,7 @@ exports.addTransaction = async (req, res) => {
 // Helper function to update budget when transactions are added, updated, or deleted
 async function updateBudgetForTransaction(userId, category, transactionDate) {
   try {
-    // Find all active budgets for the category where the transaction date falls within the budget period
-    const budgets = await Budget.find({
-      user: userId,
-      category: category,
-      status: 'active',
-      startDate: { $lte: transactionDate },
-      endDate: { $gte: transactionDate }
-    });
-
-    // Update spent amount for each relevant budget
-    for (const budget of budgets) {
-      await budget.updateSpentAmount();
-    }
+    await budgetService.refreshBudgetsFor(userId, category, transactionDate);
   } catch (error) {
     console.error('Failed to update budget for transaction:', error);
     // We don't throw here because we don't want to fail the transaction operation
@@ -146,31 +176,23 @@ exports.updateTransaction = async (req, res) => {
     const originalType = transaction.type;
     const originalDate = transaction.date;
 
-    // Convert amount to number if provided
-    if (req.body.amount) {
-      req.body.amount = Number(req.body.amount);
-    }
+    // Only these fields can be changed; the owner and everything else stay as they are
+    const updates = pick(req.body, TRANSACTION_FIELDS);
+    if (updates.amount !== undefined) updates.amount = Number(updates.amount);
+    if (updates.date !== undefined) updates.date = new Date(updates.date);
 
-    // Convert date to Date object if provided
-    if (req.body.date) {
-      req.body.date = new Date(req.body.date);
-    }
-
-    transaction = await Transaction.findByIdAndUpdate(req.params.id, req.body, {
+    transaction = await Transaction.findByIdAndUpdate(req.params.id, { $set: updates }, {
       new: true,
       runValidators: true
     });
 
-    // If this is or was an expense transaction, update the corresponding budget(s)
-    if (originalType === 'expense' || transaction.type === 'expense') {
-      // If category changed, we need to update both old and new category budgets
-      if (originalType === 'expense' && originalCategory !== transaction.category) {
-        await updateBudgetForTransaction(req.user.id, originalCategory, originalDate);
-      }
-      // Update the budget for the new category/date
-      if (transaction.type === 'expense') {
-        await updateBudgetForTransaction(req.user.id, transaction.category, transaction.date);
-      }
+    // Recalculate the budget the transaction used to count against, and the
+    // one it counts against now (category, date or type may have changed)
+    if (originalType === 'expense') {
+      await updateBudgetForTransaction(req.user.id, originalCategory, originalDate);
+    }
+    if (transaction.type === 'expense') {
+      await updateBudgetForTransaction(req.user.id, transaction.category, transaction.date);
     }
 
     // Log activity with category
@@ -362,18 +384,11 @@ exports.updateRecurringTransaction = async (req, res) => {
       });
     }
 
-    // Convert amount to number if provided
-    if (req.body.amount) {
-      req.body.amount = Number(req.body.amount);
-    }
-
-    // Convert dates to Date objects if provided
-    if (req.body.startDate) {
-      req.body.startDate = new Date(req.body.startDate);
-    }
-    if (req.body.endDate) {
-      req.body.endDate = new Date(req.body.endDate);
-    }
+    // Only these fields can be changed; the owner and processing state stay as they are
+    const updates = pick(req.body, RECURRING_FIELDS);
+    if (updates.amount !== undefined) updates.amount = Number(updates.amount);
+    if (updates.startDate) updates.startDate = new Date(updates.startDate);
+    if (updates.endDate) updates.endDate = new Date(updates.endDate);
 
     // Find the recurring transaction and verify ownership
     let recurringTransaction = await RecurringTransaction.findOne({ 
@@ -389,7 +404,14 @@ exports.updateRecurringTransaction = async (req, res) => {
     }
 
     // Update the recurring transaction
-    recurringTransaction = await RecurringTransaction.findByIdAndUpdate(id, req.body, {
+    // Switching a paused item back on resumes from now: the occurrences it
+    // missed while paused are not created.
+    if (updates.isActive === true && recurringTransaction.isActive === false) {
+      const resumeFrom = recurringService.lastOccurrenceBefore(recurringTransaction);
+      if (resumeFrom) updates.lastProcessed = resumeFrom;
+    }
+
+    recurringTransaction = await RecurringTransaction.findByIdAndUpdate(id, { $set: updates }, {
       new: true,
       runValidators: true
     });
@@ -474,73 +496,7 @@ exports.deleteRecurringTransaction = async (req, res) => {
 // @access  Private
 exports.processRecurringTransactions = async (req, res) => {
   try {
-    const today = new Date();
-
-    // Get all active recurring transactions for the user
-    const recurringTransactions = await RecurringTransaction.find({
-      user: req.user.id,
-      isActive: true
-    });
-
-    let processedCount = 0;
-
-    for (const recurring of recurringTransactions) {
-      // Check if end date has passed
-      if (recurring.endDate && new Date(recurring.endDate) < today) {
-        // Deactivate if end date has passed
-        recurring.isActive = false;
-        await recurring.save();
-        continue;
-      }
-
-      // Calculate next due date
-      let nextDue = new Date(recurring.startDate);
-      if (recurring.lastProcessed) {
-        nextDue = new Date(recurring.lastProcessed);
-      }
-
-      // Generate all missed occurrences until today
-      while (nextDue <= today) {
-        // Create transaction
-        await Transaction.create({
-          user: req.user.id,
-          type: recurring.type,
-          amount: recurring.amount,
-          category: recurring.category,
-          description: recurring.description,
-          date: new Date(nextDue),
-          isRecurring: true,
-          recurringId: recurring._id
-        });
-
-        // If this is an expense transaction, update the corresponding budget
-        if (recurring.type === 'expense') {
-          await updateBudgetForTransaction(req.user.id, recurring.category, new Date(nextDue));
-        }
-
-        // Update last processed date
-        recurring.lastProcessed = new Date(nextDue);
-        await recurring.save();
-
-        processedCount++;
-
-        // Calculate next occurrence based on frequency while preserving time
-        switch (recurring.frequency) {
-          case 'daily':
-            nextDue.setDate(nextDue.getDate() + 1);
-            break;
-          case 'weekly':
-            nextDue.setDate(nextDue.getDate() + 7);
-            break;
-          case 'monthly':
-            nextDue.setMonth(nextDue.getMonth() + 1);
-            break;
-          case 'yearly':
-            nextDue.setFullYear(nextDue.getFullYear() + 1);
-            break;
-        }
-      }
-    }
+    const { processedCount } = await recurringService.processDueTransactions(req.user._id);
 
     // Log activity
     await logActivity(req.user.id, `Processed ${processedCount} recurring transactions`, 'transaction');

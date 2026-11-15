@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { startOfUtcDay, endOfUtcDay } = require('../utils/schedule');
 
 const budgetSchema = new mongoose.Schema({
   user: {
@@ -75,6 +76,12 @@ const budgetSchema = new mongoose.Schema({
     exceeded: {
       type: Boolean,
       default: false,
+    },
+    // Highest alert level (percent used) already sent for this period, so the
+    // same alert is not sent again every time the budget is recalculated
+    lastNotifiedLevel: {
+      type: Number,
+      default: 0,
     },
   },
   status: {
@@ -155,71 +162,75 @@ budgetSchema.methods.isNearLimit = function() {
   return percentage >= this.alerts.threshold && percentage < 100;
 }
 
-// Method to get current threshold level
+// The alert level this budget has reached: 100 once the limit is used up,
+// otherwise the budget's own threshold (80% unless changed), otherwise 0.
 budgetSchema.methods.getCurrentThresholdLevel = function() {
-  const percentage = this.percentageUsed;
+  if (this.totalAmount <= 0) return 0;
+  const percentage = (this.spentAmount / this.totalAmount) * 100;
+  const threshold = this.alerts?.threshold > 0 ? this.alerts.threshold : 80;
   if (percentage >= 100) return 100;
-  if (percentage >= 75) return 75;
-  if (percentage >= 50) return 50;
+  if (percentage >= threshold) return threshold;
   return 0;
 }
 
-// Method to check if a new notification should be triggered
+// Returns the alert level to notify about, or null if nothing new was reached
 budgetSchema.methods.shouldTriggerNotification = function() {
+  if (this.alerts?.enabled === false) return null;
   const currentLevel = this.getCurrentThresholdLevel();
-  const lastNotifiedLevel = this.alerts.lastNotifiedLevel || 0;
-  
-  // If we've reached a new threshold that we haven't been notified about yet
-  if (currentLevel > lastNotifiedLevel && currentLevel > 0) {
-    return currentLevel;
-  }
-  return null;
+  const lastNotifiedLevel = this.alerts?.lastNotifiedLevel || 0;
+  return currentLevel > lastNotifiedLevel ? currentLevel : null;
 };
 
-// Method to update spent amount
-budgetSchema.methods.updateSpentAmount = async function() {
+// Recalculate what has been spent against this budget from its transactions.
+// Pass { notify: false } to recalculate without sending a budget alert.
+budgetSchema.methods.updateSpentAmount = async function(options = {}) {
   const Transaction = mongoose.model('Transaction');
-  const Activity = mongoose.model('Activity'); // For notifications
-  
-  const transactions = await Transaction.find({
-    user: this.user,
-    category: this.category,
-    type: 'expense',
-    date: {
-      $gte: this.startDate,
-      $lte: this.endDate,
-    },
-  });
 
-  this.spentAmount = transactions.reduce((sum, transaction) => sum + transaction.amount, 0);
-  
-  // Update alert status
-  this.alerts.exceeded = this.isExceeded();
-  
-  // Check if we need to trigger a notification
-  const notificationLevel = this.shouldTriggerNotification();
-  
-  if (notificationLevel) {
-    // Update the last notified level
-    this.alerts.lastNotifiedLevel = notificationLevel;
-    
-    // Create a notification activity
-    await Activity.create({
-      user: this.user,
-      type: 'budget_notification',
-      message: `Your ${this.category} budget is at ${notificationLevel}% of its limit.`,
-      details: {
-        budgetId: this._id,
-        budgetName: this.name,
+  const [totals] = await Transaction.aggregate([
+    {
+      $match: {
+        user: this.user,
         category: this.category,
-        spent: this.spentAmount,
-        total: this.totalAmount,
-        percentage: this.percentageUsed
-      }
+        type: 'expense',
+        // The end date is a calendar day, so it counts through the end of that day
+        date: { $gte: startOfUtcDay(this.startDate), $lte: endOfUtcDay(this.endDate) },
+      },
+    },
+    { $group: { _id: null, total: { $sum: '$amount' } } },
+  ]);
+
+  this.spentAmount = totals ? totals.total : 0;
+  this.alerts.exceeded = this.isExceeded();
+
+  const notificationLevel = options.notify === false ? null : this.shouldTriggerNotification();
+  if (notificationLevel) {
+    this.alerts.lastNotifiedLevel = notificationLevel;
+  } else if (this.getCurrentThresholdLevel() < (this.alerts.lastNotifiedLevel || 0)) {
+    // Spending dropped back (a transaction was edited or deleted), so the
+    // alert may be sent again if the level is reached again
+    this.alerts.lastNotifiedLevel = this.getCurrentThresholdLevel();
+  }
+
+  const saved = await this.save();
+
+  // Notify after saving. notify() never throws, so an alert problem can no
+  // longer stop the spent amount from being stored.
+  if (notificationLevel) {
+    const { notify, formatRupees } = require('../services/notificationService');
+    const exceeded = notificationLevel >= 100;
+    await notify(this.user, {
+      category: 'budget',
+      severity: exceeded ? 'error' : 'warning',
+      title: exceeded ? 'Budget exceeded' : 'Budget alert',
+      message: exceeded
+        ? `You have spent ${formatRupees(this.spentAmount)} of your ${formatRupees(this.totalAmount)} ${this.category} budget.`
+        : `You have used ${Math.round((this.spentAmount / this.totalAmount) * 100)}% of your ${this.category} budget (${formatRupees(this.spentAmount)} of ${formatRupees(this.totalAmount)}).`,
+      link: '/budget',
+      dedupeKey: `budget:${this._id}:${notificationLevel}`,
     });
   }
-  
-  return this.save();
+
+  return saved;
 };
 
 // Method to add subcategory
@@ -240,61 +251,41 @@ budgetSchema.methods.removeSubcategory = function(subcategoryId) {
   throw new Error('Subcategory not found');
 };
 
-// Method to create next period budget (for rollover)
-budgetSchema.methods.createNextPeriod = function() {
-  if (!this.isRollover) {
-    return null;
-  }
+// Build (without saving) the budget for a later period, given its dates.
+// A carry-forward budget adds whatever was left unspent to the next period.
+budgetSchema.methods.buildNextPeriod = function({ startDate, endDate }) {
+  // What the user set, without any amount carried in from an earlier period
+  const baseAmount = Math.max(0, this.totalAmount - (this.rolloverAmount || 0));
+  const rolloverAmount = this.isRollover ? Math.max(0, this.totalAmount - this.spentAmount) : 0;
 
-  const nextStartDate = new Date(this.endDate);
-  nextStartDate.setDate(nextStartDate.getDate() + 1);
-  
-  const nextEndDate = new Date(nextStartDate);
-  switch (this.period) {
-    case 'daily':
-      // same calendar day
-      nextEndDate.setDate(nextEndDate.getDate());
-      break;
-    case 'weekly':
-      nextEndDate.setDate(nextEndDate.getDate() + 6);
-      break;
-    case 'monthly':
-      nextEndDate.setMonth(nextEndDate.getMonth() + 1);
-      nextEndDate.setDate(0); // end of month
-      break;
-    case 'quarterly':
-      nextEndDate.setMonth(nextEndDate.getMonth() + 3);
-      nextEndDate.setDate(0); // end of quarter month
-      break;
-    case 'yearly':
-      nextEndDate.setFullYear(nextEndDate.getFullYear() + 1);
-      nextEndDate.setMonth(11);
-      nextEndDate.setDate(31);
-      break;
-  }
-
-  const rolloverAmount = this.isExceeded() ? 0 : this.remainingAmount;
-
-  const nextBudget = new this.constructor({
+  return new this.constructor({
     user: this.user,
     name: this.name,
     category: this.category,
     subcategories: this.subcategories.map(sub => ({
       name: sub.name,
       amount: sub.amount,
+      spent: 0,
     })),
-    totalAmount: this.totalAmount + rolloverAmount,
+    totalAmount: baseAmount + rolloverAmount,
+    spentAmount: 0,
     period: this.period,
-    startDate: nextStartDate,
-    endDate: nextEndDate,
+    startDate,
+    endDate,
     isRollover: this.isRollover,
-    rolloverAmount: rolloverAmount,
-    alerts: this.alerts,
+    rolloverAmount,
+    alerts: {
+      enabled: this.alerts?.enabled !== false,
+      threshold: this.alerts?.threshold || 80,
+      exceeded: false,
+      lastNotifiedLevel: 0,
+    },
+    status: 'active',
     notes: this.notes,
     tags: this.tags,
+    isShared: this.isShared,
+    sharedWith: this.sharedWith,
   });
-
-  return nextBudget;
 };
 
 // Static method to get budget summary
@@ -342,13 +333,28 @@ budgetSchema.statics.getCategoryPerformance = function(userId, startDate, endDat
         totalBudgeted: { $sum: '$totalAmount' },
         totalSpent: { $sum: '$spentAmount' },
         count: { $sum: 1 },
-        avgUtilization: { $avg: { $multiply: [{ $divide: ['$spentAmount', '$totalAmount'] }, 100] } },
+        // Budgets with no amount set count as 0% used rather than dividing by zero
+        avgUtilization: {
+          $avg: {
+            $cond: [
+              { $gt: ['$totalAmount', 0] },
+              { $multiply: [{ $divide: ['$spentAmount', '$totalAmount'] }, 100] },
+              0,
+            ],
+          },
+        },
       },
     },
     {
       $addFields: {
         remaining: { $subtract: ['$totalBudgeted', '$totalSpent'] },
-        utilization: { $multiply: [{ $divide: ['$totalSpent', '$totalBudgeted'] }, 100] },
+        utilization: {
+          $cond: [
+            { $gt: ['$totalBudgeted', 0] },
+            { $multiply: [{ $divide: ['$totalSpent', '$totalBudgeted'] }, 100] },
+            0,
+          ],
+        },
       },
     },
     {

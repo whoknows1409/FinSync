@@ -1,5 +1,16 @@
 const Budget = require('../models/Budget');
 const Activity = require('../models/Activity');
+const budgetService = require('../services/budgetService');
+
+// The fields a client may set on a budget. Anything else in the request body
+// (owner, spent amount, alert bookkeeping) is ignored.
+const applyAlertSettings = (budget, alerts) => {
+  if (!alerts || typeof alerts !== 'object') return;
+  if (typeof alerts.enabled === 'boolean') budget.alerts.enabled = alerts.enabled;
+  if (alerts.threshold != null && !Number.isNaN(Number(alerts.threshold))) {
+    budget.alerts.threshold = Number(alerts.threshold);
+  }
+};
 
 // Helper function to handle errors
 const handleError = (res, error, message) => {
@@ -33,15 +44,19 @@ exports.getBudgets = async (req, res) => {
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
     
-    // Add a timestamp to force fresh data
     const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] Fetching budgets for user ${req.user.id}`);
-    
+
+    // Start the new period for any budget whose period has ended, so the list
+    // always includes the current one even if the nightly job did not run.
+    try {
+      await budgetService.rollOverExpiredBudgets(req.user._id);
+    } catch (rolloverError) {
+      console.error('Budget rollover failed:', rolloverError);
+    }
+
     const budgets = await Budget.find({ user: req.user.id })
       .sort({ createdAt: -1 })
       .lean(); // Use lean() for better performance
-
-    console.log(`[${timestamp}] Found ${budgets.length} budgets for user ${req.user.id}`);
 
     res.json({
       success: true,
@@ -126,22 +141,26 @@ exports.addBudget = async (req, res) => {
       });
     }
 
-    // Check if budget already exists for this category and period
+    // Check if an active budget already exists for this category and period.
+    // Finished periods are kept as history and must not be reused.
     const existingBudget = await Budget.findOne({
       user: req.user.id,
       category,
-      period: period || 'monthly'
-    });
+      period: period || 'monthly',
+      status: 'active'
+    }).sort({ startDate: -1 });
 
     if (existingBudget) {
       // Idempotent: update existing instead of erroring
       existingBudget.name = name;
       existingBudget.totalAmount = Number(totalAmount);
+      existingBudget.rolloverAmount = 0;
       existingBudget.startDate = startDate;
       existingBudget.endDate = endDate;
       if (typeof isRollover !== 'undefined') existingBudget.isRollover = !!isRollover;
-      if (incoming.alerts) existingBudget.alerts = incoming.alerts;
+      applyAlertSettings(existingBudget, incoming.alerts);
       await existingBudget.save();
+      await existingBudget.updateSpentAmount();
       await logActivity(req.user.id, 'Updated budget', 'budget', category);
       return res.status(200).json({ success: true, data: existingBudget });
     }
@@ -155,13 +174,12 @@ exports.addBudget = async (req, res) => {
       startDate: new Date(startDate),
       endDate: new Date(endDate),
       isRollover: !!isRollover,
-      alerts: alerts || {
-        enabled: true,
-        threshold: 80,
-        exceeded: false
-      },
       status: 'active'
     });
+    applyAlertSettings(budget, alerts);
+
+    // Count what has already been spent in this period
+    await budget.updateSpentAmount();
 
     // Log activity with category
     await logActivity(req.user.id, 'Added budget', 'budget', category);
@@ -236,6 +254,7 @@ exports.updateBudget = async (req, res) => {
         user: req.user.id,
         category: req.body.category || budget.category,
         period: req.body.period || budget.period,
+        status: 'active',
         _id: { $ne: req.params.id } // Exclude current budget
       });
 
@@ -247,10 +266,38 @@ exports.updateBudget = async (req, res) => {
       }
     }
 
-    budget = await Budget.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true
-    });
+    // Apply only the fields a user is allowed to change
+    const { name, category, totalAmount, period, startDate, endDate, isRollover, alerts, notes, tags } = req.body;
+    let { status } = req.body;
+
+    if (name !== undefined) budget.name = name;
+    if (category !== undefined) budget.category = category;
+    if (period !== undefined) budget.period = period;
+    if (startDate !== undefined) budget.startDate = startDate;
+    if (endDate !== undefined) budget.endDate = endDate;
+    if (isRollover !== undefined) budget.isRollover = !!isRollover;
+    if (notes !== undefined) budget.notes = notes;
+    if (Array.isArray(tags)) budget.tags = tags;
+    if (totalAmount !== undefined) {
+      budget.totalAmount = totalAmount;
+      // A new amount replaces whatever was carried in from the previous period
+      budget.rolloverAmount = 0;
+    }
+    if (status !== undefined) {
+      // The recurring budgets screen sends 'inactive' when a budget is switched off
+      if (status === 'inactive') status = 'paused';
+      if (!['active', 'paused', 'completed', 'cancelled'].includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid status. Must be one of: active, paused, completed, cancelled'
+        });
+      }
+      budget.status = status;
+    }
+    applyAlertSettings(budget, alerts);
+
+    await budget.save();
+    await budget.updateSpentAmount();
 
     // Log activity with category
     await logActivity(req.user.id, 'Updated budget', 'budget', budget.category);
