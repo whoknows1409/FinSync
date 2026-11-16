@@ -168,6 +168,9 @@ __tests__/
 !frontend/tests/
 !backend/__tests__/
 !frontend/__tests__/
+# The file patterns above still match inside those directories, so the test
+# files themselves have to be let back in as well
+!backend/tests/**/*.test.js
 
 # Debug & temporary files
 *-debug.js
