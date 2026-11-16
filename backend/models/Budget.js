@@ -181,9 +181,9 @@ budgetSchema.methods.shouldTriggerNotification = function() {
   return currentLevel > lastNotifiedLevel ? currentLevel : null;
 };
 
-// Recalculate what has been spent against this budget from its transactions.
-// Pass { notify: false } to recalculate without sending a budget alert.
-budgetSchema.methods.updateSpentAmount = async function(options = {}) {
+// Total of the expense transactions that count against this budget.
+// Reads only; nothing is saved.
+budgetSchema.methods.calculateSpent = async function() {
   const Transaction = mongoose.model('Transaction');
 
   const [totals] = await Transaction.aggregate([
@@ -199,7 +199,13 @@ budgetSchema.methods.updateSpentAmount = async function(options = {}) {
     { $group: { _id: null, total: { $sum: '$amount' } } },
   ]);
 
-  this.spentAmount = totals ? totals.total : 0;
+  return totals ? totals.total : 0;
+};
+
+// Recalculate what has been spent against this budget from its transactions.
+// Pass { notify: false } to recalculate without sending a budget alert.
+budgetSchema.methods.updateSpentAmount = async function(options = {}) {
+  this.spentAmount = await this.calculateSpent();
   this.alerts.exceeded = this.isExceeded();
 
   const notificationLevel = options.notify === false ? null : this.shouldTriggerNotification();

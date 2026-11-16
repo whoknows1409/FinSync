@@ -73,6 +73,8 @@ export function RecurringBudgets() {
       // Format response data to match our RecurringBudget interface
       const formattedBudgets: RecurringBudget[] = response.data
         .filter((budget: any) => ['daily', 'weekly', 'monthly', 'yearly'].includes(budget.period))
+        // Finished periods are kept as history; only the live budget for each category belongs here
+        .filter((budget: any) => !budget.status || budget.status === 'active' || budget.status === 'paused')
         .map((budget: any) => {
           // Calculate next reset date based on start date and period
           const startDate = new Date(budget.startDate);
@@ -101,7 +103,7 @@ export function RecurringBudgets() {
             startDate: new Date(budget.startDate).toISOString().split('T')[0],
             endDate: budget.endDate ? new Date(budget.endDate).toISOString().split('T')[0] : undefined,
             carryForward: budget.carryForward || false,
-            isActive: budget.isActive,
+            isActive: budget.status ? budget.status === 'active' : true,
             lastReset: budget.lastReset ? new Date(budget.lastReset).toISOString().split('T')[0] : undefined,
             nextReset: nextReset.toISOString().split('T')[0]
           };

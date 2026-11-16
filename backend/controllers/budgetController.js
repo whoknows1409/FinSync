@@ -1,6 +1,10 @@
 const Budget = require('../models/Budget');
 const Activity = require('../models/Activity');
 const budgetService = require('../services/budgetService');
+const { waitAtMost } = require('../utils/timeBudget');
+
+// Longest a page load waits for budgets to be renewed before answering anyway
+const RENEWAL_WAIT_MS = 4000;
 
 // The fields a client may set on a budget. Anything else in the request body
 // (owner, spent amount, alert bookkeeping) is ignored.
@@ -48,11 +52,9 @@ exports.getBudgets = async (req, res) => {
 
     // Start the new period for any budget whose period has ended, so the list
     // always includes the current one even if the nightly job did not run.
-    try {
-      await budgetService.rollOverExpiredBudgets(req.user._id);
-    } catch (rolloverError) {
-      console.error('Budget rollover failed:', rolloverError);
-    }
+    // If that takes unusually long the list is returned as it stands and the
+    // renewal finishes in the background.
+    await waitAtMost(budgetService.rollOverExpiredBudgets(req.user._id), RENEWAL_WAIT_MS);
 
     const budgets = await Budget.find({ user: req.user.id })
       .sort({ createdAt: -1 })

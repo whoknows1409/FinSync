@@ -5,6 +5,10 @@ const { syncBudgetCategories } = require('../utils/categorySync');
 const budgetService = require('../services/budgetService');
 const recurringService = require('../services/recurringService');
 const { notify, formatRupees } = require('../services/notificationService');
+const { waitAtMost } = require('../utils/timeBudget');
+
+// Longest a page load waits for due recurring transactions before answering anyway
+const RECURRING_WAIT_MS = 4000;
 
 // Expenses at or above this amount get a "large expense" notification
 const LARGE_EXPENSE_AMOUNT = 5000;
@@ -51,12 +55,9 @@ const logActivity = async (userId, action, type, category = null) => {
 exports.getTransactions = async (req, res) => {
   try {
     // Add any recurring transactions that have fallen due, so the list is
-    // complete even if the nightly job did not run.
-    try {
-      await recurringService.processDueTransactions(req.user._id);
-    } catch (recurringError) {
-      console.error('Recurring transaction processing failed:', recurringError);
-    }
+    // complete even if the nightly job did not run. A long backlog is finished
+    // in the background rather than holding up the page.
+    await waitAtMost(recurringService.processDueTransactions(req.user._id), RECURRING_WAIT_MS);
 
     const transactions = await Transaction.find({ user: req.user.id })
       .sort({ date: -1 }); // Sort by date in descending order (newest first)

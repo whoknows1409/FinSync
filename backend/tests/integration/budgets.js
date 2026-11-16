@@ -107,6 +107,61 @@ const iso = d => d.toISOString().slice(0, 10);
   const after = await Budget.find({ user: u2.user._id }).lean();
   check('re-adding updates the active budget only', after.length === 2 && after.find(x => x.status === 'active').totalAmount === 7000 && after.find(x => x.status === 'completed').totalAmount === 5000);
 
+  // ---------- many ended budgets: renewed in bulk, quickly, and only once
+  const u6 = await h.makeUser();
+  const lastMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const lastMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
+  const twoMonthsStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1));
+  const twoMonthsEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 0));
+  const bulkCategories = ['Food & Dining', 'Transportation', 'Shopping', 'Entertainment', 'Healthcare'];
+  const endedBudgets = [];
+  for (let i = 0; i < 120; i++) {
+    const older = i % 3 === 0;
+    endedBudgets.push({
+      user: u6.user._id, name: 'Copy', category: bulkCategories[i % bulkCategories.length], period: 'monthly',
+      // the most recent copy of each category has a distinct amount, so we can tell it was the one carried forward
+      totalAmount: older ? 111 : 2000,
+      startDate: older ? twoMonthsStart : lastMonthStart, endDate: older ? twoMonthsEnd : lastMonthEnd, status: 'active',
+    });
+  }
+  // one category already has a budget for the current period, and one is an empty placeholder
+  endedBudgets.push({ user: u6.user._id, name: 'Travel', category: 'Travel', period: 'monthly', totalAmount: 900, startDate: lastMonthStart, endDate: lastMonthEnd, status: 'active' });
+  endedBudgets.push({ user: u6.user._id, name: 'Travel now', category: 'Travel', period: 'monthly', totalAmount: 950, startDate: monthStart, endDate: monthEnd, status: 'active' });
+  endedBudgets.push({ user: u6.user._id, name: 'Empty', category: 'Education', period: 'monthly', totalAmount: 0, startDate: lastMonthStart, endDate: lastMonthEnd, status: 'active' });
+  await Budget.insertMany(endedBudgets);
+  await Transaction.create({ user: u6.user._id, type: 'expense', amount: 700, category: 'Shopping', description: 'last month', date: new Date(lastMonthStart.getTime() + 5 * 864e5) });
+
+  let roundTrips = 0;
+  h.mongoose.set('debug', () => { roundTrips++; });
+  // the budgets page asks for the list several times at once
+  const pageLoads = await Promise.all([1, 2, 3].map(() => api.get('/api/v1/budgets').set(u6.auth)));
+  h.mongoose.set('debug', false);
+
+  const afterBulk = await Budget.find({ user: u6.user._id }).lean();
+  const live = afterBulk.filter(x => x.status === 'active');
+  check('bulk: 122 ended budgets handled in a bounded number of database round trips', roundTrips <= 45 && pageLoads.every(x => x.status === 200), `${roundTrips} round trips`);
+  check('bulk: one live budget per category, for the current month', live.length === 6 && bulkCategories.every(c => live.filter(x => x.category === c).length === 1) && live.every(x => iso(x.endDate) === iso(monthEnd)), `${live.length} live`);
+  check('bulk: the most recent copy is the one carried forward', bulkCategories.every(c => live.find(x => x.category === c).totalAmount === 2000));
+  check('bulk: a category that already had a current budget gets no second one', live.filter(x => x.category === 'Travel').length === 1 && live.find(x => x.category === 'Travel').totalAmount === 950);
+  check('bulk: empty placeholder closed without a successor', !live.some(x => x.category === 'Education'));
+  // 123 budgets to begin with (122 ended, 1 current) plus 5 new periods
+  const closedCount = afterBulk.filter(x => x.status === 'completed').length;
+  check('bulk: every ended budget is closed, none deleted', closedCount === 122 && afterBulk.length === 128, `${closedCount} closed of ${afterBulk.length}`);
+  const closedShopping = afterBulk.find(x => x.status === 'completed' && x.category === 'Shopping' && x.totalAmount === 2000 && x.spentAmount === 700);
+  check('bulk: the closed period keeps its final spent amount', !!closedShopping);
+  r = await api.get('/api/v1/budgets').set(u6.auth);
+  check('bulk: loading again changes nothing', (await Budget.countDocuments({ user: u6.user._id })) === 128 && (await Budget.countDocuments({ user: u6.user._id, status: 'active' })) === 6);
+
+  // a slow renewal must not hold the page: the list is returned and renewal finishes afterwards
+  const realRollOver = budgetService.rollOverExpiredBudgets;
+  let slowFinished = false;
+  budgetService.rollOverExpiredBudgets = () => new Promise(resolve => setTimeout(() => { slowFinished = true; resolve({ expired: 0, created: 0 }); }, 6000));
+  const slowStart = Date.now();
+  r = await api.get('/api/v1/budgets').set(u6.auth);
+  const slowElapsed = Date.now() - slowStart;
+  budgetService.rollOverExpiredBudgets = realRollOver;
+  check('a slow renewal does not hold the page beyond ~4 s', r.status === 200 && slowElapsed < 5500 && !slowFinished, `${slowElapsed} ms`);
+
   // ---------- recurring transactions
   const u3 = await h.makeUser();
   const rec = await RecurringTransaction.create({
